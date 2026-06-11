@@ -226,160 +226,8 @@ MIT License — see [LICENSE](./LICENSE)
 
 ---
 
-## 3. File Structure
 
-```
-Turing/
-├── .env.example                    # Environment variable template (LLM keys, DB, Serper, etc.)
-├── .env                            # Actual environment (gitignored)
-├── .eslintrc.json                  # ESLint configuration for TypeScript
-├── .gitignore                      # Git ignore rules
-├── .github/                        # GitHub Actions CI/CD configuration
-├── next.config.mjs                 # Next.js configuration
-├── next-env.d.ts                   # Next.js TypeScript declarations
-├── package.json                    # Node.js dependencies and scripts
-├── postcss.config.js               # PostCSS config (TailwindCSS plugin)
-├── tailwind.config.ts              # TailwindCSS theme and custom token config
-├── tsconfig.json                   # TypeScript compiler config
-├── README.md                       # Project readme (minimal)
-├── CHANGELOG.md                    # Version history
-├── CONTRIBUTING.md                 # Contribution guidelines
-├── CODE_OF_CONDUCT.md              # Community code of conduct
-├── LICENSE                         # Project license
-│
-├── src/                            # Next.js source code
-│   ├── app/                        # App Router pages and layouts
-│   │   ├── globals.css             # Global CSS reset and base styles
-│   │   ├── layout.tsx              # Root HTML layout (fonts, metadata)
-│   │   ├── page.tsx                # Landing page: file upload + run initialization
-│   │   └── (dashboard)/           # Route group for dashboard UI
-│   │       ├── layout.tsx          # Dashboard layout wrapper
-│   │       └── run/
-│   │           └── [runId]/
-│   │               └── page.tsx    # Dynamic run dashboard page (all 5 tabs)
-│   │
-│   ├── components/                 # React component library
-│   │   ├── shell/                  # Navigation and layout chrome
-│   │   │   ├── TopNav.tsx          # Tab navigation bar (Graph/Canvas/Search/Abstraction/Report)
-│   │   │   └── LayerProgress.tsx   # Global pipeline progress indicator
-│   │   ├── graph/                  # Causal graph visualization
-│   │   │   ├── D3GraphEngine.tsx   # Core D3.js force simulation + SVG rendering
-│   │   │   ├── GraphPane.tsx       # Container: fetches graph data, composes D3 + panels
-│   │   │   ├── CausalGraph.tsx     # Declarative graph component (wraps D3Engine)
-│   │   │   ├── GraphNode.tsx       # Individual node SVG element
-│   │   │   ├── GraphEdge.tsx       # Individual edge SVG path
-│   │   │   ├── GraphLegend.tsx     # Color-coded node type legend
-│   │   │   ├── GraphControls.tsx   # Action buttons (Run Discovery, Identify Bottleneck, etc.)
-│   │   │   ├── CrossDomainBridge.tsx # Cross-domain bridge overlay panel on graph
-│   │   │   └── BottleneckPulse.tsx  # Animated pulse effect for bottleneck nodes
-│   │   ├── layer1/                 # Layer 1 UI components
-│   │   │   ├── FileUploader.tsx    # Drag-and-drop / click file input component
-│   │   │   └── ConfidencePanel.tsx # Displays per-node confidence scores
-│   │   ├── layer2/                 # Layer 2 UI components
-│   │   │   ├── AgentStatusPanel.tsx      # Live agent action feed / canvas
-│   │   │   ├── BestFoundPanel.tsx        # Best intervention found so far
-│   │   │   ├── ExperimentHistoryTable.tsx # Table of all simulation rounds
-│   │   │   └── Heatmap.tsx               # 2D heatmap of search space exploration
-│   │   ├── layer3/                 # Layer 3 UI components
-│   │   │   ├── SearchStatusPanel.tsx     # Real-time domain search status stream
-│   │   │   ├── BridgeResultsPanel.tsx    # Top 3 bridge results cards
-│   │   │   └── MechanismComparison.tsx   # Side-by-side bridge mechanism comparison
-│   │   └── layer4/                 # Layer 4 UI components
-│   │       ├── StreamingReport.tsx       # SSE-streamed final AI report viewer
-│   │       ├── ReportNav.tsx             # Report section navigation
-│   │       ├── ReportSection.tsx         # Individual report section block
-│   │       ├── BridgesSection.tsx        # Report section: top bridges summary
-│   │       ├── ExperimentSection.tsx     # Report section: recommended experiment
-│   │       ├── MechanismSection.tsx      # Report section: mechanism explanation
-│   │       ├── WarningsSection.tsx       # Report section: contradiction warnings
-│   │       ├── ActionsPanel.tsx          # Download / export report actions
-│   │       └── StreamingReport.tsx       # Full streaming report composite
-│   │
-│   ├── hooks/                      # Custom React hooks
-│   │   ├── useRunState.ts          # Polls /api/runs/{id}/state every 1.5s
-│   │   ├── useAgentLoop.ts         # Polls /api/runs/{id}/layer2/agents
-│   │   ├── useSearchStream.ts      # SSE consumer for Layer 3 search stream
-│   │   ├── useReportStream.ts      # SSE consumer for Layer 4 report stream
-│   │   ├── useGraphAnimation.ts    # Controls D3 animation step transitions
-│   │   └── useSystemStatus.ts      # Health check and engine version fetch
-│   │
-│   ├── lib/                        # Utility library
-│   │   ├── api.ts                  # Typed API client: all backend calls, base URL from env
-│   │   └── utils.ts                # clsx/twMerge utility helper
-│   │
-│   └── types/                      # TypeScript type definitions
-│       ├── graph.ts                # CausalGraph, CausalNode, CausalEdge, NodeType types
-│       ├── run.ts                  # RunState type for pipeline tracking
-│       └── layer3.ts               # BridgeResult and Layer 3 response types
-│
-└── python-engine/                  # FastAPI Python backend
-    ├── .env.example                # Python-side env template
-    ├── .env                        # Python-side env (gitignored)
-    ├── main.py                     # FastAPI app entry point, router registration, CORS, lifespan
-    ├── requirements.txt            # Python dependency manifest
-    ├── venv/                       # Virtual environment (gitignored)
-    ├── storage/                    # Persistent file storage
-    │   └── models/                 # Saved Gaussian Process .joblib model files
-    │
-    ├── database/                   # Database layer
-    │   ├── database.py             # Async SQLAlchemy engine, session factory, init_db()
-    │   ├── models.py               # RunModel ORM table (runs table)
-    │   └── crud.py                 # CRUD operations: create_run, get_run, update_run_status, etc.
-    │
-    ├── schemas/                    # Pydantic validation schemas
-    │   ├── graph.py                # CausalGraph, Node, Edge schemas
-    │   ├── run.py                  # Run, RunCreate, RunStatus schemas
-    │   ├── layer2.py               # Layer2Request/Response, AgentProposal, SearchSpace, etc.
-    │   ├── layer3.py               # StructuralQuery, SearchResult, MergedResult, Step11-14 schemas
-    │   └── report.py               # FinalReport schema
-    │
-    ├── routers/                    # FastAPI route handlers
-    │   ├── layer1.py               # /api/layer1/* — 8 pipeline step endpoints + orchestration
-    │   ├── layer2.py               # /api/layer2/* — Bayesian simulation + granular agent endpoints
-    │   ├── layer3.py               # /api/layer3/* — search, extract, match, rank
-    │   ├── layer4.py               # /api/layer4/report — final report generation
-    │   └── runs.py                 # /api/runs/* — CRUD + background orchestrator + SSE streams
-    │
-    └── services/                   # Business logic (pure Python service classes)
-        ├── anthropic_client.py     # Shared LLM utilities (domain-blind query, graph extraction, etc.)
-        ├── layer1/
-        │   ├── file_detector.py    # InputType detection (CSV vs TEXT vs PDF), UniversalFileDetector
-        │   ├── extractor.py        # UniversalExtractor (DATA/TEXT), AmbiguityDetector
-        │   ├── pc_algorithm.py     # PC Algorithm wrapper, PCGraphBuilder (NetworkX output)
-        │   ├── ontology_builder.py # LLMGraphBuilder: Stage A ontology + Stage B edge extraction
-        │   ├── validator.py        # GraphValidator (4 checks), ConfidenceChecker
-        │   ├── gaussian_process.py # GPEngine (propagation), StructuralFitter (edge fitting), refine_confidence_with_gp()
-        │   ├── classifier.py       # NodeClassifier: assigns Source/Sink/Bottleneck/Mediator roles
-        │   └── universal_parser.py # Low-level multi-format file parser (CSV, XLSX, PDF, DOCX, TXT)
-        ├── layer2/
-        │   ├── orchestrator.py     # run_bayesian_optimization(): master agent loop
-        │   ├── bayesian_optimizer.py # BayesianOptimizer: GP-based Expected Improvement (EI)
-        │   ├── do_calculus.py      # DoCalculusSimulator: intervention + forward propagation
-        │   ├── agent_explorer.py   # AgentExplorer: boundary-pushing strategy
-        │   ├── agent_exploiter.py  # AgentExploiter: peak-refining nudge strategy
-        │   ├── agent_contrarian.py # AgentContrarian: opposite-boundary challenge strategy
-        │   ├── cliff_detector.py   # CliffDetector + UnexploredZoneFinder
-        │   └── heatmap.py          # HeatmapGenerator: 2D intervention heatmap
-        ├── layer3/
-        │   ├── search_papers.py    # Semantic Scholar API search (academic papers)
-        │   ├── search_wikipedia.py # Wikipedia API search
-        │   ├── search_web.py       # Serper.dev web search
-        │   ├── search_patents.py   # Serper.dev patent search
-        │   ├── deduplicator.py     # Deduplication and merging of search results
-        │   ├── contradiction_detector.py # Cross-source contradiction analysis
-        │   ├── relation_extractor.py # LLM causal graph extraction from search text
-        │   ├── isomorphism.py      # NetworkX GED-based graph isomorphism matching
-        │   ├── bridge_ranker.py    # 4-factor bridge validity ranking (Step 14)
-        │   ├── unknown_extractor.py # Extracts unknown/ambiguous nodes for querying
-        │   └── search_wikipedia.py # Wikipedia REST API search
-        └── layer4/
-            ├── context_packager.py  # Packs Top 3 bridges into an LLM-ready context block
-            └── report_builder.py    # build_report(): LLM-generated final FinalReport
-```
-
----
-
-## 4. Workflow / Project Working
+## Workflow / Project Working
 
 ### Step-by-Step End-to-End Operation
 
@@ -507,7 +355,7 @@ gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
 
 ---
 
-## 5. Frontend
+##  Frontend
 
 ### UI Structure
 
@@ -589,7 +437,7 @@ GET /api/runs/{id}/layer4/report/stream  → text/event-stream
 
 ---
 
-## 6. Backend
+##  Backend
 
 ### API Structure (Routes / Endpoints)
 
@@ -681,7 +529,7 @@ The current implementation has **no authentication layer**. CORS is fully open (
 
 ---
 
-## 7. Python Engine / Core Processing Layer
+##  Python Engine / Core Processing Layer
 
 ### What This Layer Does
 
@@ -758,7 +606,7 @@ The Python engine (`python-engine/`) is a self-contained FastAPI application tha
 
 ---
 
-## 8. Layer-by-Layer Breakdown
+##  Layer-by-Layer Breakdown
 
 ### Layer 1 — Causal Discovery
 
@@ -983,7 +831,7 @@ FinalReport(
 
 ---
 
-## 9. Data Flow
+##  Data Flow
 
 ### End-to-End Data Trace
 
@@ -1079,7 +927,7 @@ Renders: problem statement → executive summary → bridges → experiment → 
 
 ---
 
-## 10. Agent System
+##  Agent System
 
 ### Agent Overview
 
@@ -1190,7 +1038,7 @@ The router's `/api/layer2/run-round` endpoint exposes one iteration externally f
 
 ---
 
-## 11. LLM Integration
+##  LLM Integration
 
 ### LLMs Used
 
@@ -1333,7 +1181,7 @@ if match:
 
 ---
 
-## 12. Impact / Outcomes
+##  Impact / Outcomes
 
 ### Efficiency Gains
 
@@ -1357,7 +1205,7 @@ if match:
 
 ---
 
-## 13. Design Decisions
+##  Design Decisions
 
 ### Why a 4-Layer Sequential Pipeline?
 
