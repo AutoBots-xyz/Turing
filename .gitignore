@@ -48,6 +48,7 @@ __pycache__/
 /python-engine/.env
 *.sqlite3
 /python-engine/database/*.sqlite3
+/python-engine/storage/**/*.joblib
 
 # IDEs and Editors
 .idea/
