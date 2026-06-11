@@ -120,7 +120,7 @@ class UniversalFileDetector:
              return {"path": "TEXT", "confidence": 0.9, "sample_preview": "\n".join(preview_lines), "details": "No identifiable tokens."}
              
         numeric_ratio = numeric_tokens / total
-        is_data = numeric_ratio > 0.6 # Requires high density of numbers to be considered a pure data file
+        is_data = numeric_ratio >= 0.5 # Consistent with tabular path: requires majority of tokens to be numbers
         
         sample_preview = "\n".join(preview_lines)
         if len(sample_preview) > 200:
@@ -145,6 +145,7 @@ class UniversalFileDetector:
             
             tables_found = 0
             text_extracted = ""
+            combined_data = []
             
             for i in range(pages_to_check):
                 page = pdf.pages[i]
@@ -152,24 +153,49 @@ class UniversalFileDetector:
                 tables = page.extract_tables()
                 if tables:
                     tables_found += len(tables)
+                    for table in tables:
+                        combined_data.extend(table)
                 
                 # Extract text for fallback/preview
                 page_text = page.extract_text()
                 if page_text:
                     text_extracted += page_text + "\n"
                     
-            if tables_found > 0:
-                return {
-                    "path": "DATA", 
-                    "confidence": 0.85, 
-                    "sample_preview": "PDF Data Table structure detected...", 
-                    "details": f"Found {tables_found} tables in the first {pages_to_check} pages."
-                }
-            else:
-                sample = text_extracted[:200].replace('\n', ' ')
-                return {
-                    "path": "TEXT",
-                    "confidence": 0.9,
-                    "sample_preview": sample,
-                    "details": "No tables detected. Processing as unstructured PDF text."
-                }
+            sample_text = text_extracted[:200].replace('\n', ' ')
+            
+            if tables_found > 0 and len(combined_data) > 1:
+                # Load table into pandas (limit to 100 rows to match spec)
+                df = pd.DataFrame(combined_data[1:101], columns=combined_data[0])
+                
+                # Coerce columns to numeric
+                for col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='ignore')
+                    
+                numeric_cols = df.select_dtypes(include=['number']).columns
+                total_cols = len(df.columns)
+                
+                if total_cols > 0:
+                    numeric_ratio = len(numeric_cols) / total_cols
+                    is_data = numeric_ratio >= 0.5
+                    
+                    if is_data:
+                        return {
+                            "path": "DATA", 
+                            "confidence": round(numeric_ratio, 2), 
+                            "sample_preview": "PDF Data Table structure detected...", 
+                            "details": f"Found {tables_found} tables. {len(numeric_cols)}/{total_cols} numeric columns."
+                        }
+                    else:
+                        return {
+                            "path": "TEXT",
+                            "confidence": round(1 - numeric_ratio, 2),
+                            "sample_preview": sample_text,
+                            "details": f"Found {tables_found} tables, but only {len(numeric_cols)}/{total_cols} numeric columns. Routing as TEXT."
+                        }
+                        
+            return {
+                "path": "TEXT",
+                "confidence": 0.9,
+                "sample_preview": sample_text,
+                "details": "No numeric tables detected. Processing as unstructured PDF text."
+            }
