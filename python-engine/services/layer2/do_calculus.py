@@ -1,4 +1,6 @@
-from typing import Dict, List, Set, Optional
+import warnings
+from collections import deque
+from typing import Dict, List, Set, Optional, Tuple
 from schemas.layer2 import GraphEdge, GaussianPrediction, SimulationStepOutput
 from services.layer1.gaussian_process import GPEngine
 
@@ -8,12 +10,6 @@ class DoCalculusSimulator:
     Do-Calculus Engine.
     Simulates interventions by cutting incoming edges to the intervened nodes,
     forcing their values, and propagating forward through the causal chain.
-
-    Fixes applied:
-    - Cycle detection: raises ValueError on cyclic graphs instead of RecursionError
-    - Edge target not in nodes list: raises ValueError with a clear message
-    - Silent skip of orphan parents: emits a warning for unresolved parent nodes
-    - base_noise is now configurable via constructor argument
     """
 
     def __init__(self, base_noise: float = 0.02):
@@ -53,6 +49,13 @@ class DoCalculusSimulator:
                     f"DoCalculusSimulator: edge target '{edge.target}' is not in the nodes list."
                 )
 
+        # Guard: every intervention node must be in the declared node list
+        for node in interventions:
+            if node not in node_set:
+                raise ValueError(
+                    f"DoCalculusSimulator: Intervention node '{node}' is not in the nodes list."
+                )
+
         # Seed predictions with intervention values (std_dev=0: we know these exactly)
         predictions: Dict[str, GaussianPrediction] = {
             node: GaussianPrediction(mean=value, std_dev=0.0)
@@ -62,24 +65,25 @@ class DoCalculusSimulator:
         # Do-calculus: cut all incoming edges to intervened nodes
         active_edges = [e for e in edges if e.target not in interventions]
 
-        # Build adjacency list of incoming (source, weight) per node
-        incoming_edges: Dict[str, List[tuple]] = {node: [] for node in nodes}
+        # Build adjacency list of incoming (source, weight) per node, and outgoing targets
+        incoming_edges: Dict[str, List[Tuple[str, float]]] = {node: [] for node in nodes}
+        outgoing_edges: Dict[str, List[str]] = {node: [] for node in nodes}
         for edge in active_edges:
             incoming_edges[edge.target].append((edge.source, edge.weight))
+            outgoing_edges[edge.source].append(edge.target)
 
         # Iterative topological sort (Kahn's algorithm) — no recursion, detects cycles
         in_degree = {node: len(incoming_edges[node]) for node in nodes}
-        queue = [node for node in nodes if in_degree[node] == 0]
+        queue = deque([node for node in nodes if in_degree[node] == 0])
         topo_order: List[str] = []
 
         while queue:
-            n = queue.pop(0)
-            topo_order.append(n)
-            for edge in active_edges:
-                if edge.source == n:
-                    in_degree[edge.target] -= 1
-                    if in_degree[edge.target] == 0:
-                        queue.append(edge.target)
+            current_node = queue.popleft()
+            topo_order.append(current_node)
+            for target in outgoing_edges[current_node]:
+                in_degree[target] -= 1
+                if in_degree[target] == 0:
+                    queue.append(target)
 
         # If not all nodes were processed, the graph has a cycle
         if len(topo_order) != len(nodes):
@@ -106,7 +110,6 @@ class DoCalculusSimulator:
                     edge_weights.append(weight)
                 else:
                     # Parent was not predicted — log a warning, do not silently skip
-                    import warnings
                     warnings.warn(
                         f"DoCalculusSimulator: parent '{parent}' of node '{node}' "
                         "has no prediction yet. It will be excluded from this node's calculation. "
@@ -121,5 +124,13 @@ class DoCalculusSimulator:
                     mean=child_pred["mean"],
                     std_dev=child_pred["std_dev"],
                 )
+            else:
+                warnings.warn(
+                    f"DoCalculusSimulator: node '{node}' has no predicted parents. "
+                    "Assigning high-uncertainty fallback.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                predictions[node] = GaussianPrediction(mean=0.0, std_dev=1.0)
 
         return SimulationStepOutput(predictions=predictions)
