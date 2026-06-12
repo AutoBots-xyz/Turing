@@ -1,6 +1,5 @@
-import random
 import warnings
-from typing import Dict, Optional
+from typing import Dict
 from schemas.layer2 import SearchSpace, AgentProposal
 
 
@@ -10,21 +9,12 @@ class AgentContrarian:
     Challenges assumptions by picking the boundary that is OPPOSITE to what
     the Explorer would choose — ensuring every round covers a unique boundary
     and no simulation round is wasted on a duplicate proposal.
-
-    Fixes applied:
-    - Optional seed for reproducibility (pass seed=42 for deterministic runs)
-    - Anti-duplication: always picks the boundary the Explorer did NOT choose,
-      ensuring Contrarian and Explorer always test different corners
-    - Empty base_point emits UserWarning instead of silently returning {}
-    - Missing domain_config key emits UserWarning with fallback to raw value
-    - Dynamic justification: reports each node's chosen boundary and why
     """
 
     def propose(
         self,
         base_point: Dict[str, float],
         domain_config: Dict[str, SearchSpace],
-        seed: Optional[int] = None,
     ) -> AgentProposal:
         """
         Propose boundary values that directly challenge the current base point.
@@ -32,17 +22,14 @@ class AgentContrarian:
         Args:
             base_point:    {node_name: current_best_value} from BayesianOptimizer
             domain_config: {node_name: SearchSpace(min, max)}
-            seed:          Optional random seed for reproducibility (default: None)
 
         Returns:
             AgentProposal with boundary values opposite to what Explorer would pick.
         """
-        if seed is not None:
-            random.seed(seed)
 
-        if not base_point:
+        if not domain_config and not base_point:
             warnings.warn(
-                "AgentContrarian: base_point is empty — no variables to challenge. "
+                "AgentContrarian: both base_point and domain_config are empty. "
                 "Returning empty proposal.",
                 UserWarning,
                 stacklevel=2,
@@ -50,16 +37,19 @@ class AgentContrarian:
             return AgentProposal(
                 agent_name="Contrarian",
                 proposed_values={},
-                justification="No variables to challenge (empty base_point).",
+                justification="No variables to challenge (empty config and base_point).",
             )
 
         proposed = {}
         challenge_details = []
 
-        for node, val in base_point.items():
+        all_nodes = set(base_point.keys()).union(domain_config.keys())
+
+        for node in all_nodes:
             space = domain_config.get(node)
 
             if space is None:
+                val = base_point[node]
                 warnings.warn(
                     f"AgentContrarian: node '{node}' has no SearchSpace in domain_config. "
                     "Falling back to raw base_point value — no boundary challenge applied.",
@@ -69,6 +59,8 @@ class AgentContrarian:
                 proposed[node] = val
                 challenge_details.append(f"{node}={val} (no space — not challenged)")
                 continue
+
+            val = base_point.get(node, (space.min + space.max) / 2)
 
             dist_to_min = abs(val - space.min)
             dist_to_max = abs(val - space.max)
