@@ -7,16 +7,6 @@ class UnexploredZoneFinder:
     """
     Checks original data against simulated space to find mathematically
     uncertain but highly promising unexplored zones.
-
-    Fixes applied:
-    - sink_node is now dynamic, auto-detected if not provided.
-    - User-facing message uses the dynamic sink_node name.
-    - Configurable gap threshold (payload.gap_threshold) instead of hardcoded 20%.
-    - Emits UserWarning and skips if domain_config is missing for a node.
-    - Hold-steady logic uses historically best values (like heatmap), not domain center.
-    - Fallback GaussianPrediction provides a high uncertainty (std_dev=1.0) to flag 
-      the zone as truly unexplored and uncertain.
-    - Raises ValueError if no source nodes are found in the graph.
     """
 
     def __init__(self):
@@ -79,6 +69,13 @@ class UnexploredZoneFinder:
         # Find best past run for hold-steady logic later
         best_past = {}
         if payload.historical_data:
+            if not any(sink_node in entry for entry in payload.historical_data):
+                warnings.warn(
+                    f"UnexploredZoneFinder: None of the historical entries contain the sink_node key '{sink_node}'. "
+                    "Hold-steady logic will fall back to domain center values.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             best_run = max(
                 payload.historical_data,
                 key=lambda x: x.get(sink_node, 0)
@@ -139,7 +136,10 @@ class UnexploredZoneFinder:
                                 (other_space.min + other_space.max) / 2
                             )
                         else:
-                            steady_val = best_past.get(other_node, 0.0)
+                            raise ValueError(
+                                f"UnexploredZoneFinder: source node '{other_node}' is missing from domain_config. "
+                                "Cannot determine hold-steady baseline."
+                            )
                         interventions[other_node] = steady_val
 
                 sim_res = self.simulator.simulate(
@@ -155,8 +155,8 @@ class UnexploredZoneFinder:
 
                 msg = (
                     f"You have never tested {node} between {round(gap_min, 1)} and {round(gap_max, 1)}. "
-                    f"Simulation predicts {sink_node} may reach {round(pred.mean, 1)}% "
-                    f"but uncertainty is high ± {round(pred.std_dev, 1)}% — "
+                    f"Simulation predicts {sink_node} may reach {round(pred.mean, 1)} "
+                    f"but uncertainty is high ± {round(pred.std_dev, 1)} — "
                     f"only {num_experiments} experiment(s) globally."
                 )
 
