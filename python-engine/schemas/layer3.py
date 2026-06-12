@@ -28,6 +28,9 @@ class SearchResult(BaseModel):
     url: Optional[str] = None
     confidence: float = Field(..., description="Initial confidence score from this single source (0-100)")
     original_query: StructuralQuery
+    citation_count: int = Field(default=0, description="Number of times this paper/patent has been cited")
+    replication_count: int = Field(default=0, description="Number of times this study has been independently replicated")
+    deployment_status: str = Field(default="unknown", description="Production deployment evidence: 'deployed', 'replicated', 'single_study', 'blog', 'unknown'")
 
 class DebateTranscript(BaseModel):
     proposer_argument: str
@@ -74,9 +77,15 @@ class IsomorphismMatch(BaseModel):
     isomorphism_score: float = Field(..., description="Structural similarity score (0.0 to 100.0)")
     match_type: MatchType
 
+class IsomorphismThresholds(BaseModel):
+    perfect: float = Field(default=100.0, description="Score threshold for PERFECT match")
+    strong_partial: float = Field(default=70.0, description="Score threshold for STRONG_PARTIAL match")
+    weak_partial: float = Field(default=30.0, description="Score threshold for WEAK_PARTIAL match")
+
 class Step13Request(BaseModel):
     target_graph: CausalGraph
     candidates: List[ExtractedMechanism]
+    thresholds: IsomorphismThresholds = Field(default_factory=IsomorphismThresholds, description="Configurable match classification thresholds")
 
 class Step13Response(BaseModel):
     matches: List[IsomorphismMatch]
@@ -94,6 +103,7 @@ class RankedBridge(BaseModel):
 
 class Step14Request(BaseModel):
     matches: List[IsomorphismMatch]
+    user_domain_context: str = Field(default="", description="The domain-blind structural description from Step 10, used as LLM evaluation context")
 
 class Step14Response(BaseModel):
     top_bridges: List[RankedBridge]
