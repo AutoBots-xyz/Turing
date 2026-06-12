@@ -44,7 +44,7 @@ export default function LandingPage() {
           <div className="brutal-box p-8 bg-white border-2 border-black shadow-[8px_8px_0px_rgba(0,0,0,1)]">
             <h2 className="font-mono font-bold text-sm tracking-widest mb-4 uppercase text-black">System Objective</h2>
             <p className="text-sm leading-relaxed text-gray-700 font-sans">
-              TURING is a next-generation AI pipeline that ingests your raw datasets, autonomously maps the causal topology, mathematically strips away domain-specific semantics, and scans external domains (e.g., biology, supply chain, physics) to find isomorphic structural solutions to your bottlenecks.
+              TURING is a next-generation AI pipeline that ingests your raw datasets, autonomously maps the causal topology, mathematically strips away domain-specific semantics, and scans external domains (e.g., biology, supply chain, physics) to find isomorphic structural solutions to your bottlenecks. It also performs dynamic system simulations to validate the proposed interventions.
             </p>
           </div>
 
