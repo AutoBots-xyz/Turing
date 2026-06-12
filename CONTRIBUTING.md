@@ -47,11 +47,6 @@ chore:    build, deps, config
 - Code without tests for new features
 - PRs that change too many things at once
 
-## Code Style
-
-- TypeScript only for frontend, Python for backend
-- Follow existing patterns in codebase
-- Run `npm run lint` before submitting
 
 ## Questions?
 
