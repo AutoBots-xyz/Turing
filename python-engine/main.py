@@ -1,25 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import layer1
+from routers import layer2
 
 app = FastAPI(
-    title="Turing Nexus API",
-    description="Causal Graph Discovery Engine Backend",
+    title="Turing - Causal Nexus API",
+    description="Python backend for the Causal Nexus architecture.",
     version="1.0.0"
 )
 
-# Configure CORS for Next.js frontend (defaulting to localhost:3000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(layer1.router)
+# Register all Layer 2 routes
+app.include_router(layer2.router)
 
 @app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+async def health():
+    return {"status": "ok", "service": "turing-python-engine"}
