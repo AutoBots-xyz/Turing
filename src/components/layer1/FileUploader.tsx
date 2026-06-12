@@ -53,7 +53,7 @@ export const FileUploader: React.FC = () => {
       <div className="relative group shrink-0">
         <input 
           type="file" 
-          accept=".csv,.xlsx,.xls"
+          accept=".csv,.xlsx,.xls,.txt,.json"
           ref={fileInputRef}
           onChange={handleFileChange}
           disabled={isUploading}
@@ -66,7 +66,7 @@ export const FileUploader: React.FC = () => {
             {isUploading ? 'UPLOADING...' : 'DRAG & DROP OR CLICK TO BROWSE'}
           </span>
           <span className="font-mono text-[10px] text-gray-500">
-            ACCEPTED FORMATS: CSV, EXCEL
+            ACCEPTED FORMATS: CSV, EXCEL, TXT, JSON
           </span>
         </div>
       </div>
