@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import layer1
+from routers import runs
 
 app = FastAPI(
     title="Turing Nexus API",
@@ -19,6 +20,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(layer1.router)
+app.include_router(runs.router)
 
 @app.get("/health")
 def health_check():
