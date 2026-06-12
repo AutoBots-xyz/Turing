@@ -1,8 +1,17 @@
 """
-FastAPI Router for Layer 2: Mathematical Simulation & Causal Optimization.
+routers/layer2.py — Layer 2 Agent Simulation Endpoints
+
+Combines the single orchestration endpoint (/simulate) from main
+and the granular, step-by-step UI endpoints from Sub_Manas.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 import asyncio
+
+# Main / Orchestration Imports
+from schemas.layer2 import Layer2Request, Layer2Response
+from services.layer2.bayesian_optimizer import run_bayesian_optimization
+
+# Granular Endpoint Imports (Sub_Manas)
 from schemas.layer2 import (
     ModeDetectorInput, ModeDetectorOutput, PipelineMode, InputType,
     VariableIdentifierInput, VariableIdentifierOutput, IdentifiedNode, SearchSpace,
@@ -19,12 +28,35 @@ from services.layer2.agent_contrarian import AgentContrarian
 from services.layer2.heatmap import HeatmapGenerator
 from services.layer2.unexplored_zone_finder import UnexploredZoneFinder
 
-router = APIRouter(
-    prefix="/layer2",
-    tags=["Layer 2 - Simulation & Optimization"]
-)
+# Note: prefix is handled in main.py (/api/layer2)
+router = APIRouter()
 
-@router.post("/mode-detect", response_model=ModeDetectorOutput)
+# ==============================================================================
+# 1. ORCHESTRATION ENDPOINT (main)
+# ==============================================================================
+
+@router.post(
+    "/simulate",
+    response_model=Layer2Response,
+    summary="Layer 2 — Run Bayesian agent simulation on a causal graph"
+)
+async def simulate(request: Layer2Request):
+    """
+    Accepts a CausalGraph and a target node id. Runs up to `max_iterations`
+    rounds of Bayesian Optimization where three ReAct agents (Explorer,
+    Exploiter, Contrarian) propose causal interventions. Returns the best
+    intervention and all simulation results.
+    """
+    try:
+        return await run_bayesian_optimization(request)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+# ==============================================================================
+# 2. GRANULAR UI ENDPOINTS (Sub_Manas)
+# ==============================================================================
+
+@router.post("/mode-detect", response_model=ModeDetectorOutput, summary="Detect pipeline mode")
 async def detect_mode(payload: ModeDetectorInput):
     if payload.input_type == InputType.DATA:
         return ModeDetectorOutput(
@@ -37,7 +69,7 @@ async def detect_mode(payload: ModeDetectorInput):
             message="Text input detected. Routing to LITERATURE MODE. Skipping simulation."
         )
 
-@router.post("/identify-variables", response_model=VariableIdentifierOutput)
+@router.post("/identify-variables", response_model=VariableIdentifierOutput, summary="Identify graph variables")
 def identify_variables(payload: VariableIdentifierInput):
     in_degrees = {node: 0 for node in payload.nodes}
     out_degrees = {node: 0 for node in payload.nodes}
@@ -67,12 +99,12 @@ def identify_variables(payload: VariableIdentifierInput):
         intermediate_nodes=intermediate_nodes
     )
 
-@router.post("/simulate-chain", response_model=SimulationStepOutput)
+@router.post("/simulate-chain", response_model=SimulationStepOutput, summary="Simulate single do-calculus chain")
 def simulate_chain(payload: SimulationStepInput):
     simulator = DoCalculusSimulator()
     return simulator.simulate(payload.nodes, payload.edges, payload.source_values)
 
-@router.post("/run-round", response_model=RoundHistory)
+@router.post("/run-round", response_model=RoundHistory, summary="Run single agent round")
 async def run_round(payload: RoundInput):
     optimizer = BayesianOptimizer()
     explorer = AgentExplorer()
@@ -148,12 +180,12 @@ async def run_round(payload: RoundInput):
         all_results=sim_outputs
     )
 
-@router.post("/generate-heatmap", response_model=HeatmapOutput)
+@router.post("/generate-heatmap", response_model=HeatmapOutput, summary="Generate simulation heatmap")
 def generate_heatmap(payload: HeatmapInput):
     generator = HeatmapGenerator()
     return generator.generate(payload)
 
-@router.post("/find-unexplored-zones", response_model=ZoneFinderOutput)
+@router.post("/find-unexplored-zones", response_model=ZoneFinderOutput, summary="Find unexplored data zones")
 def find_unexplored_zones(payload: ZoneFinderInput):
     """
     Step 6 — Unexplored Zone Finder
