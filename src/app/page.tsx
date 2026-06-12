@@ -58,7 +58,7 @@ export default function LandingPage() {
               
               {/* File Upload */}
               <div>
-                <label className="block font-mono text-xs font-bold text-gray-500 mb-2 uppercase">Dataset / Text Upload (CSV/XLSX/TXT/JSON)</label>
+                <label className="block font-mono text-xs font-bold text-gray-500 mb-2 uppercase">Dataset / Text Upload (CSV/XLSX/TXT/JSON/PDF/MD)</label>
                 <div className="w-full">
                   <FileUploader />
                 </div>
