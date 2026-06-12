@@ -7,7 +7,7 @@ import json
 import logging
 import pandas as pd
 import pdfplumber
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 
 logger = logging.getLogger(__name__)
 
@@ -134,3 +134,84 @@ class UniversalExtractor:
             warnings.append(f"LOW_DATA_WARNING: Dataset has only {final_len} rows. Causal discovery confidence may be low. Minimum 30 rows recommended.")
 
         return numeric_df, warnings
+
+
+# ─── AmbiguityDetector (Steps 7 & 8) ─────────────────────────────────────────
+# Consolidated from services/layer1/ambiguity.py to match folder-structure.md.
+# Gatekeeper for Layer 1: evaluates graph confidence and decides if Layer 2
+# agent swarm is required.
+
+class AmbiguityDetector:
+    """
+    Steps 7 & 8: Gatekeeper for Layer 1. Evaluates graph confidence.
+    """
+
+    @staticmethod
+    def analyze_graph(graph_data: dict) -> dict:
+        """
+        Calculates edge confidences and ranks node urgency.
+        """
+        nodes = graph_data.get("nodes", [])
+        edges = graph_data.get("edges", [])
+
+        if not nodes or not edges:
+            graph_data["requires_layer2"] = False
+            graph_data["overall_graph_confidence"] = 100
+            graph_data["urgent_nodes"] = []
+            return graph_data
+
+        logger.info(f"Running Ambiguity Detector on {len(edges)} edges...")
+
+        total_confidence = 0
+        node_confidences: Dict[str, List[float]] = {n["id"]: [] for n in nodes}
+
+        # Step 7a: Score every edge
+        for edge in edges:
+            raw_val = edge.get("confidence")
+            if raw_val is None:
+                raw_val = edge.get("weight", 0.5)
+
+            abs_val = min(abs(float(raw_val)), 1.0)
+            pct_val = round(abs_val * 100)
+            edge["confidence_score"] = pct_val
+            total_confidence += pct_val
+
+            if pct_val > 85:
+                edge["confidence_flag"] = "✅"
+            elif pct_val >= 50:
+                edge["confidence_flag"] = "⚠️"
+            else:
+                edge["confidence_flag"] = "❌"
+
+            source = edge.get("source", "?")
+            target = edge.get("target", "?")
+            edge["confidence_label"] = f"{source} → {target} {pct_val}% {edge['confidence_flag']}"
+
+            if source in node_confidences:
+                node_confidences[source].append(pct_val)
+            if target in node_confidences:
+                node_confidences[target].append(pct_val)
+
+        # Step 7b: Find unknown nodes and rank by urgency
+        urgent_nodes = []
+        for node in nodes:
+            node_id = node["id"]
+            confs = node_confidences.get(node_id, [])
+            min_conf = min(confs) if confs else 0
+            node["urgency_score"] = min_conf
+
+            if min_conf < 85:
+                urgent_nodes.append({
+                    "node_id": node_id,
+                    "urgency_score": min_conf,
+                    "label": f"Node {node_id} {min_conf}%"
+                })
+
+        urgent_nodes.sort(key=lambda x: x["urgency_score"])
+        graph_data["urgent_nodes"] = urgent_nodes
+
+        overall_conf = round(total_confidence / len(edges)) if edges else 100
+        graph_data["overall_graph_confidence"] = overall_conf
+
+        logger.info(f"Ambiguity Detector finished. Ranked {len(urgent_nodes)} nodes by urgency.")
+        return graph_data
