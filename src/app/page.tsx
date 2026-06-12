@@ -96,15 +96,11 @@ export default function LandingPage() {
             
             <div className="flex flex-col gap-5">
               
-              <button onClick={() => router.push('/run/turing-active-run')} className="text-left group cursor-pointer block w-full hover:bg-gray-50 p-2 -ml-2 rounded transition-colors">
-                <div className="font-mono text-[10px] text-orange-500 font-bold mb-1 flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse" />
-                  ACTIVE
-                </div>
-                <div className="font-bold font-sans text-sm text-black group-hover:underline">turing-active-run</div>
-                <div className="text-xs text-gray-500 font-sans mt-1">Marketing Spend Optimization</div>
-              </button>
-
+              {/* Dynamically populated from backend in production */}
+              <div className="text-left opacity-50 p-2 -ml-2">
+                <div className="font-mono text-[10px] text-gray-400 font-bold mb-1">WAITING FOR INGESTION</div>
+                <div className="font-bold font-sans text-sm text-black italic">No active runs</div>
+              </div>
             </div>
           </div>
         </div>
