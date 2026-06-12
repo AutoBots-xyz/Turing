@@ -1,6 +1,6 @@
 import math
 import warnings
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 # TODO: REPLACE WITH REAL GP — When Layer 1 is complete, swap this mock for
 # scikit-learn's GaussianProcessRegressor or BoTorch fitted on the actual CSV data.
@@ -12,18 +12,13 @@ class GPEngine:
     In a real scenario, this would wrap scikit-learn's GaussianProcessRegressor or BoTorch.
     For this architectural demonstration, it simulates mathematical prediction and uncertainty
     compounding using a weighted-sum mean and quadrature uncertainty propagation.
-
-    Fixes applied:
-    - Mismatched parent/weight list raises ValueError instead of silent truncation
-    - None edge weights emit a warning and default to 0.5 instead of silently replacing
-    - child_mean is floored at 0.0 (yield cannot be negative)
     """
     def __init__(self, base_noise: float = 0.02):
         # Base noise added at each edge traversal.
         # Increase for high-variance domains; decrease for tightly-controlled lab conditions.
         self.base_noise = base_noise
 
-    def predict_child(self, parent_predictions: List[Dict[str, float]], edge_weights: List[float]) -> Dict[str, float]:
+    def predict_child(self, parent_predictions: List[Dict[str, float]], edge_weights: List[Optional[float]]) -> Dict[str, float]:
         """
         Takes a list of parent predictions (each having 'mean' and 'std_dev')
         and the corresponding edge weights.
@@ -37,6 +32,11 @@ class GPEngine:
             ValueError: if parent_predictions and edge_weights are different lengths
         """
         if not parent_predictions:
+            warnings.warn(
+                "GPEngine.predict_child: called with no parents. Returning base noise fallback.",
+                UserWarning,
+                stacklevel=2
+            )
             return {"mean": 0.0, "std_dev": self.base_noise}
 
         # Guard: mismatched list lengths would cause silent truncation via zip()
