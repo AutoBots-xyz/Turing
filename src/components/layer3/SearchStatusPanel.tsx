@@ -140,7 +140,7 @@ const RadarLockCard: React.FC<RadarLockCardProps> = ({ isLocked, bridge, index }
 // ─── SearchStatusPanel (main export) ─────────────────────────────────────────
 
 export const SearchStatusPanel: React.FC = () => {
-  const runId = 'nexus-active-run';
+  const runId = 'turing-active-run';
   const { state, error } = useSearchStream(runId);
 
   const isLocked = state?.isLocked || false;

@@ -4,7 +4,7 @@ import React from 'react';
 import { useRunState } from '@/hooks/useRunState';
 
 export const LayerProgress: React.FC = () => {
-  const { runState } = useRunState('nexus-active-run');
+  const { runState } = useRunState('turing-active-run');
   // Default to 1 if no state is present
   const currentLayer = runState?.currentLayer || 1;
 

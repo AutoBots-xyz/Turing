@@ -15,8 +15,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Causal Nexus",
-  description: "Causal Graph Discovery Engine",
+  title: "Turing Causal Engine",
+  description: "Autonomous Causal Discovery & Cross-Domain Abstraction",
 };
 
 export default function RootLayout({

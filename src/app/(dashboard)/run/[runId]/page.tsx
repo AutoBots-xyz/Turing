@@ -23,9 +23,15 @@ import { ReportNav } from "@/components/layer4/ReportNav";
 import { StreamingReport } from "@/components/layer4/StreamingReport";
 import { ActionsPanel } from "@/components/layer4/ActionsPanel";
 
-export default function RunPage() {
-  const params = useParams();
-  const runId = Array.isArray(params.runId) ? params.runId[0] : (params.runId || 'nexus-active-run');
+interface PipelineRunPageProps {
+  params: {
+    runId?: string | string[];
+  };
+}
+
+export default function PipelineRunPage({ params }: PipelineRunPageProps) {
+  // Use params.runId, falling back to turing-active-run if empty or undefined
+  const runId = Array.isArray(params.runId) ? params.runId[0] : (params.runId || 'turing-active-run');
   
   const [activeTab, setActiveTab] = useState<TabType>("graph");
   const { runState } = useRunState(runId);

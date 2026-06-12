@@ -20,7 +20,10 @@ export const TopNav: React.FC<TopNavProps> = ({ activeTab, onTabChange }) => {
 
   return (
     <nav className="w-full h-20 flex items-center justify-between px-10 border-b border-[#E5E5E5] bg-white z-50 relative">
-      <div className="text-xl tracking-widest font-bold text-black font-mono">NEXUS_</div>
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-orange-500 rounded-sm" />
+        <div className="text-xl tracking-widest font-bold text-black font-mono">TURING_</div>
+      </div>
       <div className="flex space-x-12 text-sm tracking-widest font-mono">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;

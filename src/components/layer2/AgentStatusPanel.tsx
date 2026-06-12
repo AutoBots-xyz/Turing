@@ -11,7 +11,8 @@ import { Layer2State } from '@/types/layer2';
 const CanvasHeader: React.FC<{ state: Layer2State | null }> = ({ state }) => (
   <div className="sticky top-0 left-0 w-full bg-white p-4 px-10 z-50 flex justify-between items-center shadow-[0_2px_10px_rgba(0,0,0,0.05)] border-b border-black">
     <div className="flex items-center space-x-2">
-      <span className="text-[#FF6B35] font-bold font-mono tracking-widest text-sm">NEXUS</span>
+      <span className="text-gray-500 font-bold font-mono tracking-widest text-sm">/ LAYER 2 : </span>
+      <span className="text-[#FF6B35] font-bold font-mono tracking-widest text-sm">TURING</span>
       <span className="text-[#E5E5E5]">|</span>
       <span className="text-black font-bold font-mono tracking-widest text-sm">LIVE INFERENCE CANVAS</span>
     </div>
@@ -35,7 +36,7 @@ export const AgentStatusPanel: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Connect to global backend orchestrator
-  const runId = 'nexus-active-run';
+  const runId = 'turing-active-run';
   const { state, error } = useAgentLoop(runId);
 
   // Auto-scroll logic: gracefully scroll to bottom when new agents are streamed in,

@@ -4,7 +4,7 @@ from routers import layer1
 from routers import runs
 
 app = FastAPI(
-    title="Turing Nexus API",
+    title="Turing API",
     description="Causal Graph Discovery Engine Backend",
     version="1.0.0"
 )
