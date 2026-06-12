@@ -9,13 +9,6 @@ class AgentExplorer:
     Takes the Bayesian base point and pushes each variable to the farthest
     boundary of its search space, deliberately seeking the edges of the system
     to find where performance degrades (cliff detection).
-
-    Fixes applied:
-    - Empty base_point emits a UserWarning and returns an empty proposal
-    - Missing domain_config key emits a UserWarning and falls back to raw value
-    - Center tie-breaking (dist_to_min == dist_to_max) now explicitly picks min
-      to ensure deterministic, documented behaviour (not silent bias toward max)
-    - Justification string is now dynamic and lists each node's actual push direction
     """
 
     def propose(
@@ -33,9 +26,9 @@ class AgentExplorer:
         Returns:
             AgentProposal with values pushed to the farthest boundary per variable.
         """
-        if not base_point:
+        if not domain_config and not base_point:
             warnings.warn(
-                "AgentExplorer: base_point is empty — no variables to explore. "
+                "AgentExplorer: both base_point and domain_config are empty. "
                 "Returning empty proposal.",
                 UserWarning,
                 stacklevel=2,
@@ -43,16 +36,19 @@ class AgentExplorer:
             return AgentProposal(
                 agent_name="Explorer",
                 proposed_values={},
-                justification="No variables to explore (empty base_point).",
+                justification="No variables to explore (empty config and base_point).",
             )
 
         proposed = {}
         push_details = []
 
-        for node, val in base_point.items():
+        all_nodes = set(base_point.keys()).union(domain_config.keys())
+
+        for node in all_nodes:
             space = domain_config.get(node)
 
             if space is None:
+                val = base_point[node]
                 warnings.warn(
                     f"AgentExplorer: node '{node}' has no SearchSpace in domain_config. "
                     "Falling back to raw base_point value — no boundary push applied.",
@@ -62,6 +58,16 @@ class AgentExplorer:
                 proposed[node] = val
                 push_details.append(f"{node}={val} (no space — not pushed)")
                 continue
+
+            val = base_point.get(node, (space.min + space.max) / 2)
+
+            if val < space.min or val > space.max:
+                warnings.warn(
+                    f"AgentExplorer: value for '{node}' ({val}) is outside "
+                    f"the domain config [{space.min}, {space.max}].",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
             dist_to_min = abs(val - space.min)
             dist_to_max = abs(val - space.max)
