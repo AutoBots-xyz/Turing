@@ -1,13 +1,98 @@
 """
-FILE: python-engine/services/layer1/validator.py
-PURPOSE: Step 4 - Graph Validator. Enforces causal logic on the generated graph (breaks cycles, removes disconnected nodes, agentically flips impossible edges, flags contradictions).
+services/layer1/validator.py
+
+Graph Validator and Consolidator.
+Combines basic schema validation (Mayank) and advanced agentic validation/fitting/routing (Harsh).
 """
+
 import logging
 import json
 import networkx as nx
+import uuid
+import os
+import joblib
+import numpy as np
+import pandas as pd
+from typing import List, Tuple, Dict
 from litellm import completion
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, WhiteKernel
+
+from schemas.graph import CausalGraph
 
 logger = logging.getLogger(__name__)
+
+# ==============================================================================
+# 1. BASIC SCHEMA VALIDATION (Mayank)
+# ==============================================================================
+
+class ValidationError(Exception):
+    """Raised when a CausalGraph fails a critical validation check."""
+    pass
+
+
+def validate_graph(graph: CausalGraph) -> Tuple[bool, List[str]]:
+    """
+    Validates a CausalGraph for correctness and minimum data quality.
+    """
+    issues: List[str] = []
+    node_ids = {node.id for node in graph.nodes}
+
+    # Critical: must have at least 2 nodes
+    if len(graph.nodes) < 2:
+        issues.append("CRITICAL: Graph has fewer than 2 nodes — no causal relationships possible.")
+        return False, issues
+
+    # Critical: duplicate node ids
+    if len(node_ids) != len(graph.nodes):
+        issues.append("CRITICAL: Duplicate node ids detected.")
+        return False, issues
+
+    # Critical: dangling edge references
+    for edge in graph.edges:
+        if edge.source not in node_ids:
+            issues.append(f"CRITICAL: Edge source '{edge.source}' does not exist in nodes.")
+            return False, issues
+        if edge.target not in node_ids:
+            issues.append(f"CRITICAL: Edge target '{edge.target}' does not exist in nodes.")
+            return False, issues
+
+    # Warning: self-loops
+    for edge in graph.edges:
+        if edge.source == edge.target:
+            issues.append(f"WARNING: Self-loop detected on node '{edge.source}' — will be ignored downstream.")
+
+    # Warning: no edges
+    if not graph.edges:
+        issues.append("WARNING: Graph has no edges — downstream Layer 2 simulation will be trivial.")
+
+    # Warning: confidence out of range
+    for node in graph.nodes:
+        if not (0.0 <= node.confidence <= 100.0):
+            issues.append(f"WARNING: Node '{node.id}' has confidence {node.confidence} outside [0, 100].")
+
+    for edge in graph.edges:
+        if not (0.0 <= edge.confidence <= 100.0):
+            issues.append(f"WARNING: Edge {edge.source}→{edge.target} has confidence {edge.confidence} outside [0, 100].")
+
+    return True, issues
+
+
+def assert_valid_graph(graph: CausalGraph) -> None:
+    """
+    Convenience wrapper that raises ValidationError on failure.
+    Use this in service code that must not continue with an invalid graph.
+    """
+    is_valid, issues = validate_graph(graph)
+    if not is_valid:
+        critical_issues = [i for i in issues if i.startswith("CRITICAL")]
+        raise ValidationError(
+            f"CausalGraph failed validation: {'; '.join(critical_issues)}"
+        )
+
+# ==============================================================================
+# 2. ADVANCED NETWORKX VALIDATION & CONSOLIDATED GATEKEEPERS (Harsh)
+# ==============================================================================
 
 class GraphValidator:
     """
@@ -56,47 +141,34 @@ class GraphValidator:
     @staticmethod
     def _flag_contradictions(graph: nx.MultiDiGraph) -> tuple[nx.MultiDiGraph, list]:
         logs = []
-        # Look for parallel edges with opposing relation types between the same nodes
-        # MultiDiGraph allows multiple edges between u and v
         for u in list(graph.nodes()):
             for v in list(graph.neighbors(u)):
-                # If there are multiple edges from u -> v
                 edge_data_dict = graph.get_edge_data(u, v)
                 if edge_data_dict and len(edge_data_dict) > 1:
                     types = [d.get("type", "") for d in edge_data_dict.values()]
-                    # Very simple contradiction check: ACTIVATES vs INHIBITS
                     if "ACTIVATES" in types and "INHIBITS" in types:
                         logs.append(f"CONTRADICTION DETECTED: Conflicting edges between {u} and {v}.")
-                        # Mark all edges between u and v as contradicted
                         for key in edge_data_dict:
                             graph[u][v][key]["is_contradicted"] = True
-                            
         return graph, logs
 
     @staticmethod
     def _resolve_cycles(graph: nx.MultiDiGraph) -> tuple[nx.MultiDiGraph, list]:
         logs = []
-        # We need a simple DiGraph to check for cycles easily
         di_graph = nx.DiGraph(graph)
-        
         try:
             cycles = list(nx.simple_cycles(di_graph))
             while cycles:
                 cycle = cycles[0]
                 logs.append(f"CYCLE DETECTED: {' -> '.join(cycle)} -> {cycle[0]}")
-                
-                # Find the weakest link in the cycle
                 min_weight = float('inf')
                 weakest_edge = None
                 
                 for i in range(len(cycle)):
                     u = cycle[i]
                     v = cycle[(i + 1) % len(cycle)]
-                    
-                    # Graph is a MultiDiGraph, so get all edges between u and v
                     edge_keys = graph[u][v]
                     for key, data in edge_keys.items():
-                        # Default confidence to 1.0 if missing so it isn't automatically picked as weakest
                         conf = data.get("confidence", 1.0)
                         if conf < min_weight:
                             min_weight = conf
@@ -107,21 +179,15 @@ class GraphValidator:
                     graph.remove_edge(u, v, key=key)
                     logs.append(f"BROKE CYCLE: Removed edge {u} -> {v} (Confidence: {min_weight})")
                     
-                # Re-evaluate
                 di_graph = nx.DiGraph(graph)
                 cycles = list(nx.simple_cycles(di_graph))
                 
         except Exception as e:
             logger.error(f"Cycle detection failed: {e}")
-            
         return graph, logs
 
     @staticmethod
     def _fix_impossible_edges(graph: nx.MultiDiGraph, model_name: str) -> tuple[nx.MultiDiGraph, list]:
-        """
-        Agentic LLM check for physically/logically impossible edges.
-        Batches edges to prevent context window overflow.
-        """
         logs = []
         edges_to_check = []
         for u, v, k, d in graph.edges(data=True, keys=True):
@@ -160,7 +226,6 @@ class GraphValidator:
                 )
                 content = response.choices[0].message.content.strip()
                 
-                # Basic parsing to handle markdown wrappers
                 if content.startswith("```json"):
                     content = content[7:-3]
                 elif content.startswith("```"):
@@ -168,9 +233,7 @@ class GraphValidator:
                     
                 flips = json.loads(content)
                 
-                # Robust parsing for different LLM JSON structures
                 if isinstance(flips, dict):
-                    # Find the first list value in the dict
                     list_found = False
                     for v in flips.values():
                         if isinstance(v, list):
@@ -187,7 +250,6 @@ class GraphValidator:
                 logger.error(f"Agentic edge validation failed on batch: {e}")
                 logs.append(f"Agentic validation skipped for a batch due to error: {e}")
                 
-        # Apply the collected flips
         for flip in all_flips:
             if not isinstance(flip, dict):
                 continue
@@ -196,12 +258,9 @@ class GraphValidator:
             reason = flip.get("reason", "Violates physics/logic")
             
             if u and v and graph.has_edge(u, v):
-                # Find the edge data
                 edges_dict = dict(graph[u][v])
                 for key, edge_data in edges_dict.items():
-                    # Remove old edge
                     graph.remove_edge(u, v, key=key)
-                    # Add flipped edge
                     graph.add_edge(v, u, **edge_data)
                     logs.append(f"AGENT FLIPPED EDGE: {u} -> {v} is now {v} -> {u}. Reason: {reason}")
                     
@@ -219,23 +278,11 @@ class GraphValidator:
     @staticmethod
     def _serialize_nx(graph: nx.MultiDiGraph) -> dict:
         nodes = [{"id": n, **d} for n, d in graph.nodes(data=True)]
-        # MultiDiGraph edges include a key, we'll flatten it for JSON
         edges = [{"source": u, "target": v, **d} for u, v, k, d in graph.edges(data=True, keys=True)]
         return {"nodes": nodes, "edges": edges}
 
 
 # ─── StructuralFitter (Step 5) ────────────────────────────────────────────────
-# Consolidated from services/layer1/fitter.py to match folder-structure.md.
-# Fits Gaussian Processes to the Data Path graph to learn mathematical
-# relationships and uncertainty bounds.
-
-import uuid
-import os
-import joblib
-import numpy as np
-import pandas as pd
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, WhiteKernel
 
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "storage", "models")
 os.makedirs(MODELS_DIR, exist_ok=True)
@@ -345,9 +392,6 @@ class StructuralFitter:
 
 
 # ─── ConfidenceChecker (Step 8) ───────────────────────────────────────────────
-# Consolidated from services/layer1/confidence.py to match folder-structure.md.
-# Final gatekeeper: assembles the Layer 1 output package and makes routing
-# decisions for Layer 2 / Layer 3.
 
 class ConfidenceChecker:
     """

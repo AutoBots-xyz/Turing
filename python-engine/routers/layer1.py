@@ -1,11 +1,24 @@
 """
-FILE: python-engine/routers/layer1.py
-PURPOSE: API Router for Layer 1 (Universal File Detection and Extraction)
+routers/layer1.py — Layer 1 Data Ingestion Endpoints
+
+Exposes both the high-level orchestration endpoints (upload, status)
+and the granular, step-by-step pipeline microservices for the Data Path and Text Path.
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+import os
+import tempfile
 from typing import Dict, Any, Optional
+
 import pandas as pd
-from services.layer1.file_detector import UniversalFileDetector
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Form
+from sqlalchemy.ext.asyncio import AsyncSession
+
+# Mayank's DB & Orchestration Imports
+from database.database import get_db
+from database import crud
+from schemas.run import RunStatus
+
+# Layer 1 Detection & Pipeline Imports
+from services.layer1.file_detector import detect_input_type, validate_file_exists, InputType, UniversalFileDetector
 from services.layer1.extractor import UniversalExtractor
 from services.layer1.pc_algorithm import PCGraphBuilder
 from services.layer1.ontology_builder import LLMGraphBuilder
@@ -15,10 +28,78 @@ from services.layer1.classifier import NodeClassifier
 from services.layer1.ambiguity import AmbiguityDetector
 from services.layer1.confidence import ConfidenceChecker
 
-router = APIRouter(
-    prefix="/api/v1/layer1",
-    tags=["layer1"],
+router = APIRouter()
+
+# ==============================================================================
+# 1. ORCHESTRATION ENDPOINTS (Mayank)
+# ==============================================================================
+
+@router.post(
+    "/upload",
+    summary="Upload a CSV or document file to start a new analysis run",
+    status_code=202,
 )
+async def upload_file(
+    run_id: str,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Accepts a file upload, persists it temporarily, detects its type,
+    and marks the run as RUNNING.
+    """
+    run = await crud.get_run(db, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+
+    # Save the uploaded file to a temp location for processing
+    suffix = os.path.splitext(file.filename or "upload")[1] or ".bin"
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    # Detect file type and validate
+    if not validate_file_exists(tmp_path):
+        raise HTTPException(status_code=400, detail="Uploaded file is empty or unreadable")
+
+    input_type = detect_input_type(tmp_path)
+    if input_type == InputType.UNKNOWN:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type: '{suffix}'. Use CSV, PDF, TXT, DOCX, or XLSX."
+        )
+
+    # Update run status to RUNNING
+    await crud.update_run_status(db, run_id, RunStatus.RUNNING)
+
+    return {
+        "run_id": run_id,
+        "filename": file.filename,
+        "detected_type": input_type.value,
+        "message": "File accepted. Processing pipeline has started.",
+    }
+
+
+@router.get(
+    "/status/{run_id}",
+    summary="Check the processing status of a Layer 1 run"
+)
+async def get_status(run_id: str, db: AsyncSession = Depends(get_db)):
+    """Lightweight status check — returns the current run status and graph if ready."""
+    run = await crud.get_run(db, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+    return {
+        "run_id": run.id,
+        "status": run.status,
+        "causal_graph": run.get_causal_graph(),
+    }
+
+
+# ==============================================================================
+# 2. GRANULAR PIPELINE ENDPOINTS (Harsh)
+# ==============================================================================
 
 @router.post("/detect")
 async def detect_file_type(file: UploadFile = File(...)) -> Dict[str, Any]:
@@ -243,4 +324,3 @@ async def confidence_check(
         return output_package
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
