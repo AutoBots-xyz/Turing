@@ -52,3 +52,49 @@ class MergedResult(BaseModel):
 class Step11Response(BaseModel):
     query: StructuralQuery
     results: List[MergedResult]
+
+class Step12Request(BaseModel):
+    merged_results: List[MergedResult]
+
+class ExtractedMechanism(BaseModel):
+    source_result: MergedResult
+    causal_graph: CausalGraph
+
+class Step12Response(BaseModel):
+    extracted_mechanisms: List[ExtractedMechanism]
+
+class MatchType(str, Enum):
+    PERFECT = "PERFECT"
+    STRONG_PARTIAL = "STRONG_PARTIAL"
+    WEAK_PARTIAL = "WEAK_PARTIAL"
+    DISCARDED = "DISCARDED"
+
+class IsomorphismMatch(BaseModel):
+    mechanism: ExtractedMechanism
+    isomorphism_score: float = Field(..., description="Structural similarity score (0.0 to 100.0)")
+    match_type: MatchType
+
+class Step13Request(BaseModel):
+    target_graph: CausalGraph
+    candidates: List[ExtractedMechanism]
+
+class Step13Response(BaseModel):
+    matches: List[IsomorphismMatch]
+
+class ValidityScores(BaseModel):
+    structural_match: float = Field(..., ge=0.0, le=1.0)
+    constraint_compatibility: float = Field(..., ge=0.0, le=1.0)
+    solution_transferability: float = Field(..., ge=0.0, le=1.0)
+    evidence_strength: float = Field(..., ge=0.0, le=1.0)
+    final_score: float = Field(..., ge=0.0, le=1.0)
+
+class RankedBridge(BaseModel):
+    match: IsomorphismMatch
+    scores: ValidityScores
+
+class Step14Request(BaseModel):
+    matches: List[IsomorphismMatch]
+
+class Step14Response(BaseModel):
+    top_bridges: List[RankedBridge]
+
