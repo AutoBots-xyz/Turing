@@ -1,6 +1,5 @@
 import asyncio
 import networkx as nx
-from networkx.algorithms import isomorphism
 
 from schemas.graph import CausalGraph
 from schemas.layer3 import Step13Request, Step13Response, IsomorphismMatch, MatchType, ExtractedMechanism
@@ -18,19 +17,22 @@ def _to_digraph(graph: CausalGraph) -> nx.DiGraph:
 
 def calculate_structural_similarity(target: CausalGraph, candidate: CausalGraph) -> float:
     """
-    Fixes Error 4: Calculates true structural similarity using networkx
-    graph algorithms — NOT raw node/edge counts.
+    Calculates structural similarity using NetworkX graph algorithms.
 
     Strategy (layered scoring):
-    1. Degree Sequence Similarity: Compares the sorted in/out-degree sequences.
-       Two graphs with the same topology will have identical degree sequences.
-    2. Bottleneck Detection: Checks if both graphs contain a node with the same
-       maximum in-degree (the structural "bottleneck").
-    3. Graph Density: Compares the overall edge density of both graphs.
-    4. Weakly Connected Components: Penalises graphs with different component counts.
+    1. In-degree sequence similarity  — captures bottleneck topology (weight 0.35)
+    2. Out-degree sequence similarity — captures fanout structure   (weight 0.25)
+    3. Bottleneck alignment          — max in-degree node match     (weight 0.25)
+    4. Graph density similarity      — overall connectivity ratio   (weight 0.15)
 
-    This is a mathematically grounded heuristic that catches structural differences
-    that raw count comparisons completely miss.
+    Fixes L3-5: Each sub-score is now clamped to [0.0, 1.0] with max(0.0, ...)
+    before the weighted sum. Previously, numerical edge cases could produce
+    negative composite scores that were silently misclassified as DISCARDED.
+
+    Fixes L3-6: The out-degree fallback when max_possible_diff == 0 was
+    incorrectly returning 0 (worst match) instead of 1.0 (perfect match).
+    Two graphs that both have zero out-degrees are a perfect structural match
+    on that dimension — they should score 1.0, not 0.
     """
     target_nx = _to_digraph(target)
     candidate_nx = _to_digraph(candidate)
@@ -41,20 +43,19 @@ def calculate_structural_similarity(target: CausalGraph, candidate: CausalGraph)
     if t_nodes == 0 or c_nodes == 0:
         return 0.0
 
-    # --- Score 1: In-degree sequence similarity (0.0 to 1.0) ---
+    # --- Score 1: In-degree sequence similarity ---
     t_in_degs = sorted([d for _, d in target_nx.in_degree()], reverse=True)
     c_in_degs = sorted([d for _, d in candidate_nx.in_degree()], reverse=True)
 
-    # Pad shorter sequence with zeros for comparison
     max_len = max(len(t_in_degs), len(c_in_degs))
     t_in_degs += [0] * (max_len - len(t_in_degs))
     c_in_degs += [0] * (max_len - len(c_in_degs))
 
-    max_possible_diff = max_len * max(max(t_in_degs), max(c_in_degs), 1)
-    actual_diff = sum(abs(a - b) for a, b in zip(t_in_degs, c_in_degs))
-    degree_seq_score = 1.0 - (actual_diff / max_possible_diff)
+    in_max_possible = max_len * max(max(t_in_degs), max(c_in_degs), 1)
+    in_actual_diff = sum(abs(a - b) for a, b in zip(t_in_degs, c_in_degs))
+    degree_seq_score = 1.0 - (in_actual_diff / in_max_possible)
 
-    # --- Score 2: Out-degree sequence similarity (0.0 to 1.0) ---
+    # --- Score 2: Out-degree sequence similarity ---
     t_out_degs = sorted([d for _, d in target_nx.out_degree()], reverse=True)
     c_out_degs = sorted([d for _, d in candidate_nx.out_degree()], reverse=True)
 
@@ -62,38 +63,48 @@ def calculate_structural_similarity(target: CausalGraph, candidate: CausalGraph)
     t_out_degs += [0] * (max_len - len(t_out_degs))
     c_out_degs += [0] * (max_len - len(c_out_degs))
 
-    max_possible_diff = max_len * max(max(t_out_degs), max(c_out_degs), 1)
-    actual_diff = sum(abs(a - b) for a, b in zip(t_out_degs, c_out_degs))
-    out_degree_score = 1.0 - (actual_diff / max_possible_diff if max_possible_diff > 0 else 0)
+    out_max_possible = max_len * max(max(t_out_degs), max(c_out_degs), 1)
+    out_actual_diff = sum(abs(a - b) for a, b in zip(t_out_degs, c_out_degs))
 
-    # --- Score 3: Structural bottleneck alignment (0.0 or 1.0) ---
+    # Fixes L3-6: when out_max_possible == 0 both graphs have all-zero out-degrees
+    # → perfect structural match on this dimension → score = 1.0 (was incorrectly 0).
+    if out_max_possible == 0:
+        out_degree_score = 1.0
+    else:
+        out_degree_score = 1.0 - (out_actual_diff / out_max_possible)
+
+    # --- Score 3: Structural bottleneck alignment ---
     t_max_in = max((d for _, d in target_nx.in_degree()), default=0)
     c_max_in = max((d for _, d in candidate_nx.in_degree()), default=0)
-    bottleneck_score = 1.0 if t_max_in == c_max_in else max(0.0, 1.0 - abs(t_max_in - c_max_in) / max(t_max_in, c_max_in, 1))
+    if t_max_in == 0 and c_max_in == 0:
+        bottleneck_score = 1.0   # Both graphs have no bottleneck — perfect match
+    else:
+        bottleneck_score = max(0.0, 1.0 - abs(t_max_in - c_max_in) / max(t_max_in, c_max_in, 1))
 
-    # --- Score 4: Graph density similarity (0.0 to 1.0) ---
+    # --- Score 4: Graph density similarity ---
     t_density = nx.density(target_nx)
     c_density = nx.density(candidate_nx)
     density_score = 1.0 - abs(t_density - c_density)
 
     # --- Weighted composite score ---
-    # In-degree pattern is the most important signal (bottleneck structure)
+    # Fixes L3-5: each sub-score clamped to [0.0, 1.0] to prevent negative totals
+    # from numerical edge cases propagating into the final score.
     score = (
-        degree_seq_score  * 0.35 +
-        out_degree_score  * 0.25 +
-        bottleneck_score  * 0.25 +
-        density_score     * 0.15
+        max(0.0, min(1.0, degree_seq_score))  * 0.35 +
+        max(0.0, min(1.0, out_degree_score))  * 0.25 +
+        max(0.0, min(1.0, bottleneck_score))  * 0.25 +
+        max(0.0, min(1.0, density_score))     * 0.15
     ) * 100.0
 
-    return round(min(100.0, score), 2)
+    return round(min(100.0, max(0.0, score)), 2)
 
 
 async def match_graphs(request: Step13Request) -> Step13Response:
     """
     Step 13: Graph Isomorphism Matcher
-    Compares extracted mechanisms against the target bottleneck graph.
-    Fixes Error 5: Uses configurable thresholds from request.thresholds
-    instead of hardcoded magic numbers.
+    Compares each candidate ExtractedMechanism against the user's target graph
+    using structural isomorphism scoring. Thresholds are configurable via
+    request.thresholds (no more hardcoded magic numbers).
     """
     thresholds = request.thresholds
     matches = []
@@ -113,7 +124,7 @@ async def match_graphs(request: Step13Request) -> Step13Response:
         matches.append(IsomorphismMatch(
             mechanism=candidate,
             isomorphism_score=score,
-            match_type=match_type
+            match_type=match_type,
         ))
 
     return Step13Response(matches=matches)
