@@ -1,0 +1,161 @@
+# ============================================================
+# TURING — CAUSAL NEXUS PROJECT .gitignore
+# ============================================================
+
+# ============================================================
+# SECRETS — NEVER COMMIT THESE
+# ============================================================
+.env
+.env.local
+.env.production
+python-engine/.env
+*.key
+*.pem
+*.p12
+*.pfx
+
+# ============================================================
+# PYTHON BACKEND (python-engine/)
+# ============================================================
+
+# Virtual environment
+python-engine/venv/
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+
+# pytest / test coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Local database — SQLite files should NOT be committed
+*.db
+*.sqlite
+*.sqlite3
+python-engine/database/*.db
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+*.ipynb
+
+# Log and audit files (dev only)
+*.log
+layer2_audit.log
+layer2_errors.json
+
+# Temporary test scripts
+python-engine/test_*.py
+
+# ============================================================
+# NEXT.JS FRONTEND (src/)
+# ============================================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js build output
+.next/
+out/
+
+# Production build
+build/
+
+# Vercel
+.vercel
+
+# TypeScript build info
+*.tsbuildinfo
+next-env.d.ts
+
+# ============================================================
+# OPERATING SYSTEM
+# ============================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ============================================================
+# EDITORS & IDEs
+# ============================================================
+
+# VSCode (keep workspace settings, ignore personal)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# JetBrains
+.idea/
+*.iml
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# ============================================================
+# MISCELLANEOUS
+# ============================================================
+
+# Compressed files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Large data files (uploaded CSVs and PDFs should not be committed)
+*.csv
+*.pdf
+*.xlsx
+*.xls
+uploads/
+data/raw/
+
+# Lock files — commit package-lock.json but not pip lock
+# pip-lock is typically requirements.txt (already committed)
+
+# ============================================================
+# PROJECT RULES & INTERNAL DOCS (dev-only, do not commit)
+# ============================================================
+rules/
