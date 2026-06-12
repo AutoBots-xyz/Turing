@@ -1,0 +1,125 @@
+from typing import Dict, List, Set, Optional
+from schemas.layer2 import GraphEdge, GaussianPrediction, SimulationStepOutput
+from services.layer1.gaussian_process import GPEngine
+
+
+class DoCalculusSimulator:
+    """
+    Do-Calculus Engine.
+    Simulates interventions by cutting incoming edges to the intervened nodes,
+    forcing their values, and propagating forward through the causal chain.
+
+    Fixes applied:
+    - Cycle detection: raises ValueError on cyclic graphs instead of RecursionError
+    - Edge target not in nodes list: raises ValueError with a clear message
+    - Silent skip of orphan parents: emits a warning for unresolved parent nodes
+    - base_noise is now configurable via constructor argument
+    """
+
+    def __init__(self, base_noise: float = 0.02):
+        self.gp_engine = GPEngine(base_noise=base_noise)
+
+    def simulate(
+        self,
+        nodes: List[str],
+        edges: List[GraphEdge],
+        interventions: Dict[str, float],
+    ) -> SimulationStepOutput:
+        """
+        Run a do-calculus intervention simulation.
+
+        Args:
+            nodes:         Full list of node names in the graph.
+            edges:         Directed edges (source → target).
+            interventions: Dict of {node_name: forced_value} — these nodes have
+                           their incoming edges cut and their value fixed.
+
+        Returns:
+            SimulationStepOutput with a GaussianPrediction for every reachable node.
+
+        Raises:
+            ValueError: if any edge references a node not in `nodes`, or if a cycle is detected.
+        """
+        node_set = set(nodes)
+
+        # Guard: every edge endpoint must be in the declared node list
+        for edge in edges:
+            if edge.source not in node_set:
+                raise ValueError(
+                    f"DoCalculusSimulator: edge source '{edge.source}' is not in the nodes list."
+                )
+            if edge.target not in node_set:
+                raise ValueError(
+                    f"DoCalculusSimulator: edge target '{edge.target}' is not in the nodes list."
+                )
+
+        # Seed predictions with intervention values (std_dev=0: we know these exactly)
+        predictions: Dict[str, GaussianPrediction] = {
+            node: GaussianPrediction(mean=value, std_dev=0.0)
+            for node, value in interventions.items()
+        }
+
+        # Do-calculus: cut all incoming edges to intervened nodes
+        active_edges = [e for e in edges if e.target not in interventions]
+
+        # Build adjacency list of incoming (source, weight) per node
+        incoming_edges: Dict[str, List[tuple]] = {node: [] for node in nodes}
+        for edge in active_edges:
+            incoming_edges[edge.target].append((edge.source, edge.weight))
+
+        # Iterative topological sort (Kahn's algorithm) — no recursion, detects cycles
+        in_degree = {node: len(incoming_edges[node]) for node in nodes}
+        queue = [node for node in nodes if in_degree[node] == 0]
+        topo_order: List[str] = []
+
+        while queue:
+            n = queue.pop(0)
+            topo_order.append(n)
+            for edge in active_edges:
+                if edge.source == n:
+                    in_degree[edge.target] -= 1
+                    if in_degree[edge.target] == 0:
+                        queue.append(edge.target)
+
+        # If not all nodes were processed, the graph has a cycle
+        if len(topo_order) != len(nodes):
+            unprocessed = [n for n in nodes if n not in topo_order]
+            raise ValueError(
+                f"DoCalculusSimulator: cycle detected in graph. "
+                f"Nodes involved: {unprocessed}. Causal graphs must be acyclic (DAGs)."
+            )
+
+        # Forward propagation
+        for node in topo_order:
+            if node in predictions:
+                continue
+
+            parent_preds = []
+            edge_weights = []
+
+            for parent, weight in incoming_edges[node]:
+                if parent in predictions:
+                    parent_preds.append({
+                        "mean": predictions[parent].mean,
+                        "std_dev": predictions[parent].std_dev,
+                    })
+                    edge_weights.append(weight)
+                else:
+                    # Parent was not predicted — log a warning, do not silently skip
+                    import warnings
+                    warnings.warn(
+                        f"DoCalculusSimulator: parent '{parent}' of node '{node}' "
+                        "has no prediction yet. It will be excluded from this node's calculation. "
+                        "Check graph connectivity.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+
+            if parent_preds:
+                child_pred = self.gp_engine.predict_child(parent_preds, edge_weights)
+                predictions[node] = GaussianPrediction(
+                    mean=child_pred["mean"],
+                    std_dev=child_pred["std_dev"],
+                )
+
+        return SimulationStepOutput(predictions=predictions)
