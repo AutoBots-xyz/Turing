@@ -222,3 +222,167 @@ class GraphValidator:
         # MultiDiGraph edges include a key, we'll flatten it for JSON
         edges = [{"source": u, "target": v, **d} for u, v, k, d in graph.edges(data=True, keys=True)]
         return {"nodes": nodes, "edges": edges}
+
+
+# ─── StructuralFitter (Step 5) ────────────────────────────────────────────────
+# Consolidated from services/layer1/fitter.py to match folder-structure.md.
+# Fits Gaussian Processes to the Data Path graph to learn mathematical
+# relationships and uncertainty bounds.
+
+import uuid
+import os
+import joblib
+import numpy as np
+import pandas as pd
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, WhiteKernel
+
+MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "storage", "models")
+os.makedirs(MODELS_DIR, exist_ok=True)
+
+class StructuralFitter:
+    """
+    Step 5: Fits Gaussian Process equations to causal graphs.
+    Only processes DATA path graphs. Skips TEXT path.
+    """
+
+    @staticmethod
+    def fit_graph(df: pd.DataFrame, graph_data: dict, path_type: str) -> dict:
+        """
+        Fits a GP for every target node based on its causal parents.
+        Saves the models to disk and returns augmented graph data.
+        """
+        if path_type == "TEXT":
+            logger.info("Skipping Structural Equation Fitter for TEXT path.")
+            graph_data["is_fitted"] = False
+            return graph_data
+
+        if df.empty:
+            raise ValueError("Cannot fit graph with empty DataFrame.")
+
+        logger.info(f"Fitting Structural Equations for DATA path graph with {len(df)} rows...")
+
+        session_id = str(uuid.uuid4())
+        models = {}
+
+        nodes = graph_data.get("nodes", [])
+        edges = graph_data.get("edges", [])
+
+        parents_map = {n["id"]: [] for n in nodes}
+        for e in edges:
+            target = e["target"]
+            source = e["source"]
+            if target in parents_map:
+                parents_map[target].append(source)
+
+        global_warnings = []
+
+        for node in nodes:
+            node_id = node["id"]
+            parents = parents_map.get(node_id, [])
+
+            if not parents:
+                node["fit_metrics"] = {"r2": None, "mean_uncertainty": None, "status": "SOURCE"}
+                continue
+
+            valid_parents = [p for p in parents if p in df.columns]
+            if not valid_parents or node_id not in df.columns:
+                node["fit_metrics"] = {"r2": None, "mean_uncertainty": None, "status": "MISSING_DATA"}
+                continue
+
+            X = df[valid_parents].values
+            y = df[node_id].values
+
+            kernel = 1.0 * RBF(length_scale=1.0) + WhiteKernel(noise_level=1.0)
+            gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=5, normalize_y=True, random_state=42)
+
+            try:
+                gp.fit(X, y)
+                models[node_id] = {"model": gp, "parents": valid_parents}
+
+                r2 = gp.score(X, y)
+                y_pred, std = gp.predict(X, return_std=True)
+                mean_uncertainty = float(np.mean(std))
+
+                example_parent_vals = [f"{p}={X[0][i]:.2f}" for i, p in enumerate(valid_parents)]
+                example_str = f"{', '.join(example_parent_vals)} → {node_id}={y_pred[0]:.2f} ± {std[0]:.2f}"
+
+                sparse_warning = False
+                y_std = float(np.std(y))
+                if y_std > 0 and (mean_uncertainty / y_std) > 0.2:
+                    sparse_warning = True
+                    warning_msg = f"Sparse data detected for {node_id}. High uncertainty relative to variance in causal relationship."
+                    global_warnings.append(warning_msg)
+                    node.setdefault("warnings", []).append(warning_msg)
+
+                node["fit_metrics"] = {
+                    "r2": float(r2),
+                    "mean_uncertainty": mean_uncertainty,
+                    "status": "FITTED",
+                    "example_equation": example_str,
+                    "sparse_data_warning": sparse_warning
+                }
+                logger.debug(f"Fitted GP for {node_id} (R2: {r2:.3f}, Unc: {mean_uncertainty:.3f})")
+
+            except Exception as e:
+                logger.error(f"Failed to fit GP for node {node_id}: {e}")
+                node["fit_metrics"] = {"r2": None, "mean_uncertainty": None, "status": f"ERROR: {str(e)}"}
+
+        model_path = os.path.join(MODELS_DIR, f"{session_id}.joblib")
+        try:
+            joblib.dump(models, model_path)
+            logger.info(f"Successfully saved {len(models)} models to {model_path}")
+        except Exception as e:
+            logger.error(f"Failed to save models to disk: {e}")
+            raise RuntimeError(f"Model serialization failed: {e}")
+
+        graph_data["is_fitted"] = True
+        graph_data["session_id"] = session_id
+        if global_warnings:
+            graph_data.setdefault("global_warnings", []).extend(global_warnings)
+
+        return graph_data
+
+
+# ─── ConfidenceChecker (Step 8) ───────────────────────────────────────────────
+# Consolidated from services/layer1/confidence.py to match folder-structure.md.
+# Final gatekeeper: assembles the Layer 1 output package and makes routing
+# decisions for Layer 2 / Layer 3.
+
+class ConfidenceChecker:
+    """
+    Step 8: The Final Gatekeeper of Layer 1.
+    Decides the final routing and assembles the output package.
+    """
+
+    @staticmethod
+    def evaluate_graph(graph_data: dict, path_type: str) -> dict:
+        """
+        Reads the ambiguity scores from Step 7 and enforces the Dual Path routing logic.
+        """
+        path_type = path_type.upper()
+        logger.info(f"Running Step 8 Confidence Check for {path_type} path...")
+
+        graph_data["input_type"] = path_type
+
+        overall_conf = graph_data.get("overall_graph_confidence", 100)
+        urgent_nodes = graph_data.get("urgent_nodes", [])
+        lowest_node_conf = urgent_nodes[0]["urgency_score"] if urgent_nodes else 100
+
+        is_low_confidence = overall_conf < 85 or lowest_node_conf < 85
+
+        if not is_low_confidence:
+            graph_data["routing"] = "SKIP_TO_L3"
+            logger.info(f"Graph passed confidence check ({overall_conf}%). Routing: SKIP_TO_L3")
+        else:
+            if path_type == "DATA":
+                graph_data["routing"] = "ROUTE_TO_L2_SIMULATION"
+                logger.info(f"DATA graph failed confidence check ({overall_conf}%). Routing: ROUTE_TO_L2_SIMULATION")
+            else:
+                graph_data["routing"] = "SKIP_TO_L3"
+                logger.info(f"TEXT graph failed confidence check ({overall_conf}%), but Text path skips Simulation. Routing: SKIP_TO_L3")
+
+        graph_data["domain_constraints"] = []
+        graph_data["sparsity_warnings"] = graph_data.pop("global_warnings", [])
+
+        return graph_data
