@@ -1,3 +1,6 @@
+"""
+FastAPI Router for Layer 2: Mathematical Simulation & Causal Optimization.
+"""
 from fastapi import APIRouter
 import asyncio
 from schemas.layer2 import (
@@ -35,7 +38,7 @@ async def detect_mode(payload: ModeDetectorInput):
         )
 
 @router.post("/identify-variables", response_model=VariableIdentifierOutput)
-async def identify_variables(payload: VariableIdentifierInput):
+def identify_variables(payload: VariableIdentifierInput):
     in_degrees = {node: 0 for node in payload.nodes}
     out_degrees = {node: 0 for node in payload.nodes}
     
@@ -65,7 +68,7 @@ async def identify_variables(payload: VariableIdentifierInput):
     )
 
 @router.post("/simulate-chain", response_model=SimulationStepOutput)
-async def simulate_chain(payload: SimulationStepInput):
+def simulate_chain(payload: SimulationStepInput):
     simulator = DoCalculusSimulator()
     return simulator.simulate(payload.nodes, payload.edges, payload.source_values)
 
@@ -83,11 +86,14 @@ async def run_round(payload: RoundInput):
     if getattr(payload, "sink_node", None):
         sink_node_name = payload.sink_node
     else:
+        in_degrees = {node: 0 for node in payload.nodes}
         out_degrees = {node: 0 for node in payload.nodes}
         for edge in payload.edges:
             if edge.source in out_degrees:
                 out_degrees[edge.source] += 1
-        sink_candidates = [n for n in payload.nodes if out_degrees.get(n, 0) == 0]
+            if edge.target in in_degrees:
+                in_degrees[edge.target] += 1
+        sink_candidates = [n for n in payload.nodes if out_degrees.get(n, 0) == 0 and in_degrees.get(n, 0) > 0]
         sink_node_name = sink_candidates[-1] if sink_candidates else payload.nodes[-1]
         
     base_point = optimizer.get_base_point(payload.historical_data, domain_config, sink_node=sink_node_name)
@@ -99,7 +105,7 @@ async def run_round(payload: RoundInput):
     ]
     
     async def simulate_proposal(prop):
-        res = simulator.simulate(payload.nodes, payload.edges, prop.proposed_values)
+        res = await asyncio.to_thread(simulator.simulate, payload.nodes, payload.edges, prop.proposed_values)
         return prop, res
         
     sim_tasks = [simulate_proposal(p) for p in proposals]
@@ -143,12 +149,12 @@ async def run_round(payload: RoundInput):
     )
 
 @router.post("/generate-heatmap", response_model=HeatmapOutput)
-async def generate_heatmap(payload: HeatmapInput):
+def generate_heatmap(payload: HeatmapInput):
     generator = HeatmapGenerator()
     return generator.generate(payload)
 
 @router.post("/find-unexplored-zones", response_model=ZoneFinderOutput)
-async def find_unexplored_zones(payload: ZoneFinderInput):
+def find_unexplored_zones(payload: ZoneFinderInput):
     """
     Step 6 — Unexplored Zone Finder
     Checks historical data against the boundaries to flag
