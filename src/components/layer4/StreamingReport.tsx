@@ -8,8 +8,8 @@ import { ExperimentSection } from './ExperimentSection';
 import { WarningsSection } from './WarningsSection';
 
 export const StreamingReport: React.FC = () => {
-  const runId = 'nexus-active-run';
-  const { report } = useReportStream(runId);
+  const runId = 'turing-active-run';
+  const { report, isLoading } = useReportStream(runId);
 
   // If report is null, we are totally waiting for the stream to begin
   const isGlobalStreaming = report ? !report.isComplete : true;

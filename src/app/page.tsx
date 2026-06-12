@@ -12,7 +12,7 @@ export default function LandingPage() {
     e.preventDefault();
     // In a real app, this would POST the initial data/prompt to create a run ID
     // For this demo, we immediately route to the active pipeline
-    router.push('/run/nexus-active-run');
+    router.push('/run/turing-active-run');
   };
 
   return (
@@ -23,7 +23,7 @@ export default function LandingPage() {
         <div>
           <h1 className="text-4xl font-bold tracking-tighter uppercase font-sans flex items-center gap-4">
             <div className="w-6 h-6 bg-orange-500 rounded-full animate-pulse" />
-            Turing <span className="text-orange-500 ml-2">NEXUS</span>
+            Turing <span className="text-orange-500 ml-2">ENGINE</span>
           </h1>
           <p className="font-mono text-xs text-gray-500 mt-3 font-bold tracking-widest uppercase">
             Autonomous Causal Discovery & Cross-Domain Abstraction
@@ -44,7 +44,7 @@ export default function LandingPage() {
           <div className="brutal-box p-8 bg-white border-2 border-black shadow-[8px_8px_0px_rgba(0,0,0,1)]">
             <h2 className="font-mono font-bold text-sm tracking-widest mb-4 uppercase text-black">System Objective</h2>
             <p className="text-sm leading-relaxed text-gray-700 font-sans">
-              NEXUS is a next-generation AI pipeline that ingests your raw datasets, autonomously maps the causal topology, mathematically strips away domain-specific semantics, and scans external domains (e.g., biology, supply chain, physics) to find isomorphic structural solutions to your bottlenecks.
+              TURING is a next-generation AI pipeline that ingests your raw datasets, autonomously maps the causal topology, mathematically strips away domain-specific semantics, and scans external domains (e.g., biology, supply chain, physics) to find isomorphic structural solutions to your bottlenecks.
             </p>
           </div>
 
@@ -96,12 +96,12 @@ export default function LandingPage() {
             
             <div className="flex flex-col gap-5">
               
-              <button onClick={() => router.push('/run/nexus-active-run')} className="text-left group cursor-pointer block w-full hover:bg-gray-50 p-2 -ml-2 rounded transition-colors">
+              <button onClick={() => router.push('/run/turing-active-run')} className="text-left group cursor-pointer block w-full hover:bg-gray-50 p-2 -ml-2 rounded transition-colors">
                 <div className="font-mono text-[10px] text-orange-500 font-bold mb-1 flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse" />
                   ACTIVE
                 </div>
-                <div className="font-bold font-sans text-sm text-black group-hover:underline">nexus-active-run</div>
+                <div className="font-bold font-sans text-sm text-black group-hover:underline">turing-active-run</div>
                 <div className="text-xs text-gray-500 font-sans mt-1">Marketing Spend Optimization</div>
               </button>
 

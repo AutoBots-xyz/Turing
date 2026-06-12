@@ -4,8 +4,8 @@ from routers import layer1
 from routers import runs
 
 app = FastAPI(
-    title="Turing - Causal Nexus API",
-    description="Python backend for the Causal Nexus architecture.",
+    title="Turing API",
+    description="Causal Graph Discovery Engine Backend",
     version="1.0.0"
 )
 

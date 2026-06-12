@@ -12,9 +12,7 @@ const D3GraphEngine = dynamic(
 );
 
 export const GraphPane: React.FC = () => {
-  // In a real app, runId would be dynamic (e.g., from URL or Context)
-  // For the active production pipeline, we use a single active run namespace
-  const runId = 'nexus-active-run'; 
+  const runId = 'turing-active-run'; // In a real app, this would be passed via context or props
   const API_BASE = 'http://127.0.0.1:8000';
   
   const { runState } = useRunState(runId);

@@ -151,7 +151,7 @@ const StructuralFingerprintColumn: React.FC<{ nodes: CausalNode[], edges: Causal
 
 // ─── BridgeResultsPanel ────────────────────────────────────────────────────────
 export const BridgeResultsPanel: React.FC = () => {
-  const { graph } = useGraphAnimation('nexus-active-run');
+  const { graph } = useGraphAnimation('turing-active-run');
   const nodes = graph?.nodes || [];
   const edges = graph?.edges || [];
 

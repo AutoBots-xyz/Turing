@@ -22,7 +22,7 @@ export const FileUploader: React.FC = () => {
 
     try {
       // Hardcoded to the active namespace for the demo pipeline
-      const runId = 'nexus-active-run';
+      const runId = 'turing-active-run';
       const response = await fetch(`http://127.0.0.1:8000/runs/${runId}/layer1/upload`, {
         method: 'POST',
         body: formData,
