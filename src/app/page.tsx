@@ -105,22 +105,6 @@ export default function LandingPage() {
                 <div className="text-xs text-gray-500 font-sans mt-1">Marketing Spend Optimization</div>
               </button>
 
-              <div className="h-[1px] w-full bg-gray-200" />
-
-              <div className="text-left cursor-not-allowed opacity-50 p-2 -ml-2">
-                <div className="font-mono text-[10px] text-gray-400 font-bold mb-1">COMPLETED</div>
-                <div className="font-bold font-sans text-sm text-black">run-7742-bio</div>
-                <div className="text-xs text-gray-500 font-sans mt-1">Protein Folding Bottleneck</div>
-              </div>
-
-              <div className="h-[1px] w-full bg-gray-200" />
-
-              <div className="text-left cursor-not-allowed opacity-50 p-2 -ml-2">
-                <div className="font-mono text-[10px] text-red-500 font-bold mb-1">FAILED (LAYER 1)</div>
-                <div className="font-bold font-sans text-sm text-black">run-8821-sup</div>
-                <div className="text-xs text-gray-500 font-sans mt-1">Supply Chain Latency</div>
-              </div>
-
             </div>
           </div>
         </div>
