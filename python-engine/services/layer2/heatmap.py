@@ -1,7 +1,8 @@
 import warnings
-from typing import List, Optional
+from typing import List
 from schemas.layer2 import HeatmapInput, HeatmapOutput, HeatmapPoint, SearchSpace, GaussianPrediction
 from services.layer2.do_calculus import DoCalculusSimulator
+from services.layer2.cliff_detector import CliffDetector
 
 
 def linspace(start: float, stop: float, num: int) -> List[float]:
@@ -17,15 +18,6 @@ class HeatmapGenerator:
     Generates a full 2D heatmap of the parameter space using the GP simulator.
     If there are >2 source nodes, picks the first two for axes and holds the
     rest steady at their historically best values (hold-steady logic).
-
-    Fixes applied:
-    - sink_node is now dynamic (from HeatmapInput.sink_node, auto-detected if None)
-    - No-source-nodes raises ValueError instead of returning silent bad data
-    - Missing domain_config key raises ValueError instead of using fictional 0-100 bounds
-    - resolution < 2 is rejected by Pydantic (ge=2 constraint on schema)
-    - Cliff sigma is configurable via HeatmapInput.cliff_sigma
-    - is_1d flag added to HeatmapOutput so frontend knows when axes collapsed
-    - "yield" hardcoding removed from hold-steady best_run lookup
     """
 
     def __init__(self):
@@ -106,11 +98,19 @@ class HeatmapGenerator:
         if len(source_nodes) > 2:
             best_past = {}
             if payload.historical_data:
-                best_run = max(
-                    payload.historical_data,
-                    key=lambda x: x.get(sink_node_name, 0)
-                )
-                best_past = best_run.get("values", {})
+                if not any(sink_node_name in entry for entry in payload.historical_data):
+                    warnings.warn(
+                        f"HeatmapGenerator: None of the historical entries contain the sink_node key '{sink_node_name}'. "
+                        "Hold-steady logic will fall back to domain center values.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                else:
+                    best_run = max(
+                        payload.historical_data,
+                        key=lambda x: x.get(sink_node_name, 0)
+                    )
+                    best_past = best_run.get("values", {})
 
             for node in source_nodes[2:]:
                 if node not in payload.domain_config:
@@ -148,14 +148,7 @@ class HeatmapGenerator:
                 ))
 
         # ── Step 6: Relative cliff detection ─────────────────────────────────
-        if data_points:
-            z_vals = [pt.z_val for pt in data_points]
-            mean_z = sum(z_vals) / len(z_vals)
-            variance = sum((z - mean_z) ** 2 for z in z_vals) / len(z_vals)
-            std_z = variance ** 0.5
-            cliff_threshold = mean_z - payload.cliff_sigma * std_z
-            for pt in data_points:
-                pt.is_cliff = pt.z_val < cliff_threshold
+        CliffDetector.detect_cliffs(data_points, payload.cliff_sigma)
 
         return HeatmapOutput(
             x_label=x_label,
