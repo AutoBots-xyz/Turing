@@ -1,7 +1,9 @@
 import os
 import httpx
+import asyncio
 from typing import List
 from schemas.layer3 import StructuralQuery, SearchResult, SearchSource
+from services.anthropic_client import classify_deployment_status
 
 # Serper.dev API — freemium, as specified in different.md
 SERPER_API_URL = "https://google.serper.dev/search"
@@ -15,42 +17,10 @@ SEARCH_SUFFIX = (
 )
 
 # ---------------------------------------------------------------------------
-# Authority domains for deployment_status inference (Fixes L3-8)
+# Authority domains for deployment_status inference 
+# Fixes ERR-B23: Hardcoded lists have been replaced by an LLM-based 
+# `classify_deployment_status` mechanism imported from anthropic_client.
 # ---------------------------------------------------------------------------
-_DEPLOYED_DOMAINS = frozenset({
-    "aws.amazon.com", "cloud.google.com", "azure.microsoft.com",
-    "engineering.fb.com", "netflixtechblog.com", "uber.com/blog",
-    "airbnb.io", "dropbox.tech", "linkedin.engineering",
-})
-
-_AUTHORITATIVE_DOMAINS = frozenset({
-    "martinfowler.com", "infoq.com", "acm.org", "ieee.org",
-    "oreilly.com", "dzone.com", "baeldung.com", "thoughtworks.com",
-})
-
-
-def _deployment_status_from_url(url: str) -> str:
-    """
-    Fixes L3-8: Derives deployment_status from the result URL domain instead
-    of hardcoding "blog" for every single web result.
-
-    Previously, ALL web results received deployment_status="blog" regardless
-    of the source — so AWS whitepapers, IEEE articles, and Martin Fowler posts
-    all got the same minimum evidence penalty as a random blog post.
-
-    Now:
-    - Major cloud/tech company engineering blogs → "deployed" (production evidence)
-    - Recognised authoritative technical publishers → "single_study"
-    - Everything else → "blog"
-    """
-    if not url:
-        return "blog"
-    domain = url.lower()
-    if any(d in domain for d in _DEPLOYED_DOMAINS):
-        return "deployed"
-    if any(d in domain for d in _AUTHORITATIVE_DOMAINS):
-        return "single_study"
-    return "blog"
 
 
 def _confidence_from_rank(rank: int, total: int) -> float:
@@ -96,14 +66,24 @@ async def search_web(query: StructuralQuery) -> List[SearchResult]:
             organic = data.get("organic", [])
             total = len(organic)
 
+            # Fixes ERR-B23: Gather deployment statuses concurrently using LLM
+            tasks = []
+            for item in organic:
+                snippet = item.get("snippet", item.get("title", ""))
+                url = item.get("link", "")
+                tasks.append(classify_deployment_status(url, snippet))
+                
+            statuses = await asyncio.gather(*tasks, return_exceptions=True)
+
             for rank, item in enumerate(organic):
                 title = item.get("title", "Untitled Article")
                 snippet = item.get("snippet", title)
                 url = item.get("link")
 
                 confidence = _confidence_from_rank(rank, total)
-                # Fixes L3-8: infer status from URL domain, not hardcoded "blog"
-                deployment_status = _deployment_status_from_url(url or "")
+                
+                status_result = statuses[rank]
+                deployment_status = "blog" if isinstance(status_result, Exception) else status_result
 
                 results.append(SearchResult(
                     source=SearchSource.WEB,

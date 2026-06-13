@@ -72,50 +72,96 @@ def run_pc_algorithm(content: dict) -> CausalGraph:
 
         return CausalGraph(nodes=nodes, edges=edges)
 
-    except ImportError:
-        # causal-learn not installed — return a heuristic correlation graph
-        return _fallback_correlation_graph(columns, matrix)
+    except ImportError as e:
+        # Fixes ERR-B39: Replaced "Correlation is Causation" fallback with fail-fast exception.
+        raise ImportError(
+            "Mathematical causal discovery failed: 'causal-learn' is not installed. "
+            "The PC Algorithm requires this library to reliably infer causation (correlation is not causation)."
+        ) from e
 
+# ==============================================================================
+# 2. ADVANCED NETWORKX EXTRACTION (Harsh)
+# ==============================================================================
 
-def _fallback_correlation_graph(columns: List[str], matrix: List[List[float]]) -> CausalGraph:
+class PCGraphBuilder:
     """
-    Fallback when causal-learn is unavailable: builds a graph based on
-    Pearson correlation. Edges are drawn for |r| > 0.5 with directionality
-    assigned by temporal ordering (earlier columns cause later ones).
+    Step 3 (DATA PATH): Converts a pristine DataFrame into a mathematical
+    causal graph using the PC Algorithm.
     """
-    import statistics
 
-    nodes = [Node(id=col, label=col, confidence=50.0) for col in columns]
-    edges = []
-    n = len(columns)
-    num_rows = len(matrix)
+    @staticmethod
+    def build_graph(df: pd.DataFrame, alpha: float = 0.05) -> dict:
+        """
+        Runs the PC algorithm on the DataFrame.
+        Returns a networkx compatible JSON dictionary.
+        """
+        if df.empty:
+            raise ValueError("Cannot build graph from empty DataFrame.")
 
-    if num_rows < 2:
-        return CausalGraph(nodes=nodes, edges=[])
+        columns = df.columns.tolist()
+        data_matrix = df.to_numpy()
 
-    for i in range(n):
-        for j in range(i + 1, n):
-            col_i = [matrix[r][i] for r in range(num_rows)]
-            col_j = [matrix[r][j] for r in range(num_rows)]
+        logger.info(f"Running PC Algorithm on {len(df)} rows, {len(columns)} columns with alpha={alpha}")
 
-            mean_i = statistics.mean(col_i)
-            mean_j = statistics.mean(col_j)
-            std_i = statistics.stdev(col_i) if len(col_i) > 1 else 1.0
-            std_j = statistics.stdev(col_j) if len(col_j) > 1 else 1.0
+        # Run PC Algorithm
+        # default fisherz test for continuous data
+        if 'pc' not in globals():
+            raise ImportError("causal-learn is not installed.")
+            
+        cg = pc(data_matrix, alpha, indep_test='fisherz', show_progress=False)
 
-            if std_i == 0 or std_j == 0:
-                continue
+        # Convert causal-learn graph to NetworkX
+        nx_graph = nx.DiGraph()
 
-            cov = sum((col_i[r] - mean_i) * (col_j[r] - mean_j) for r in range(num_rows)) / num_rows
-            r = cov / (std_i * std_j)
+        # Add nodes
+        for i, col in enumerate(columns):
+            nx_graph.add_node(col, id=col, label=col, type="variable")
 
-            if abs(r) > 0.5:
-                confidence = round(abs(r) * 100, 1)
-                edges.append(Edge(
-                    source=columns[i],
-                    target=columns[j],
-                    relation="CORRELATES_WITH",
-                    confidence=confidence,
-                ))
+        adj_matrix = cg.G.graph
+        num_nodes = len(columns)
 
-    return CausalGraph(nodes=nodes, edges=edges)
+        for i in range(num_nodes):
+            for j in range(num_nodes):
+                if i == j:
+                    continue
+                
+                # Check for directed edge i -> j
+                if adj_matrix[i, j] == -1 and adj_matrix[j, i] == 1:
+                    # Calculate correlation for the visual edge weight
+                    correlation = float(np.corrcoef(data_matrix[:, i], data_matrix[:, j])[0, 1])
+                    
+                    # Extract actual conditional independence test p-value
+                    try:
+                        p_value = float(cg.ci_test(i, j, set()))
+                        confidence = max(0.0, 1.0 - p_value)
+                    except Exception:
+                        confidence = abs(correlation) # Fallback if ci_test fails
+                    
+                    nx_graph.add_edge(
+                        columns[i], 
+                        columns[j], 
+                        weight=correlation,
+                        confidence=confidence,
+                        type="CAUSES" # Default mathematical relation
+                    )
+
+        # Serialize to JSON format expected by UI
+        return PCGraphBuilder._serialize_nx(nx_graph)
+
+    @staticmethod
+    def _serialize_nx(graph: nx.DiGraph) -> dict:
+        """
+        Converts a NetworkX DiGraph into a standardized JSON payload.
+        """
+        nodes = []
+        for node, data in graph.nodes(data=True):
+            nodes.append({"id": node, **data})
+
+        edges = []
+        for source, target, data in graph.edges(data=True):
+            edges.append({"source": source, "target": target, **data})
+
+        return {
+            "nodes": nodes,
+            "edges": edges
+        }

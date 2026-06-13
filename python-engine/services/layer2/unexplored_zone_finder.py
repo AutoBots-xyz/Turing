@@ -130,15 +130,18 @@ class UnexploredZoneFinder:
                 for other_node in source_nodes:
                     if other_node != node:
                         other_space = payload.domain_config.get(other_node)
-                        if other_space:
-                            steady_val = best_past.get(
-                                other_node,
-                                (other_space.min + other_space.max) / 2
-                            )
-                        else:
+                        if not other_space:
                             raise ValueError(
                                 f"UnexploredZoneFinder: source node '{other_node}' is missing from domain_config. "
                                 "Cannot determine hold-steady baseline."
+                            )
+                        if other_node in best_past:
+                            steady_val = best_past[other_node]
+                        else:
+                            # Fixes ERR-B41: Prevent statistically meaningless middle-of-domain fallbacks
+                            raise ValueError(
+                                f"Cannot establish a steady-state baseline for '{other_node}'. It is missing from "
+                                "historical data, and blindly picking the domain midpoint is statistically invalid."
                             )
                         interventions[other_node] = steady_val
 
@@ -146,10 +149,10 @@ class UnexploredZoneFinder:
                     payload.nodes, payload.edges, interventions
                 )
                 
-                # Use std_dev=1.0 for missing predictions to correctly flag high uncertainty
-                pred = sim_res.predictions.get(
-                    sink_node, GaussianPrediction(mean=0.0, std_dev=1.0)
-                )
+                # Fixes ERR-B42: Remove fake Gaussian prediction injection
+                pred = sim_res.predictions.get(sink_node)
+                if not pred:
+                    continue
 
                 num_experiments = len(payload.historical_data)
 

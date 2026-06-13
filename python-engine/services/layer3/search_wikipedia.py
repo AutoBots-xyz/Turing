@@ -56,22 +56,9 @@ async def search_wikipedia(query: StructuralQuery) -> List[SearchResult]:
                 page_id = article.get("pageid")
                 url = f"https://en.wikipedia.org/?curid={page_id}" if page_id else None
 
-                # Step 2: Fetch link count from the article as a proxy for citation_count
+                # Fixes ERR-B46: Removed fabricated Wikipedia citation math based on article length.
+                # Wikipedia does not track academic citations. Set to 0 to prevent data fabrication.
                 citation_count = 0
-                if page_id:
-                    info_params = {
-                        "action": "query",
-                        "prop": "info",
-                        "pageids": page_id,
-                        "inprop": "url",
-                        "format": "json",
-                    }
-                    info_resp = await client.get(WIKIPEDIA_SEARCH_API, params=info_params)
-                    if info_resp.status_code == 200:
-                        info_data = info_resp.json()
-                        page_info = info_data.get("query", {}).get("pages", {}).get(str(page_id), {})
-                        # Use article length as proxy for citation richness
-                        citation_count = page_info.get("length", 0) // 100
 
                 confidence = _confidence_from_rank(rank, total)
 

@@ -52,15 +52,11 @@ def generate_domain_blind_query(node: Node, graph: CausalGraph) -> str:
         )
         return response.choices[0].message.content.strip()
 
-    # --- Mock fallback (only used if ANTHROPIC_API_KEY is not set) ---
-    num_inputs = len(incoming)
-    num_outputs = len(outgoing)
-    if num_inputs >= 2 and num_outputs == 1:
-        return f"{num_inputs} high-variance inputs converge on a single shared bottleneck causing systemic output failure"
-    elif num_inputs == 0:
-        return f"an unconstrained source node produces {num_outputs} diverging causal outputs"
-    else:
-        return f"a node with {num_inputs} inputs and {num_outputs} outputs mediates causal flow with {node.confidence:.0f}% confidence"
+    # --- Fallback (no API key) ---
+    raise RuntimeError(
+        "Domain-blind query generation failed: ANTHROPIC_API_KEY is missing. "
+        "Cannot reliably generate structural queries without a configured LLM."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -108,42 +104,13 @@ async def extract_causal_graph_from_text(text: str) -> CausalGraph:
         edges = [Edge(source=e["source"], target=e["target"], relation=e["relation"], confidence=e["confidence"]) for e in data["edges"]]
         return CausalGraph(nodes=nodes, edges=edges)
 
-    # --- Mock fallback (only used if ANTHROPIC_API_KEY is not set) ---
-    await asyncio.sleep(0.1)
-    text_lower = text.lower()
-
-    if "bypass" in text_lower and "valve" in text_lower:
-        nodes = [
-            Node(id="n1", label="Input Pressure",   confidence=95.0),
-            Node(id="n2", label="Bottleneck",        confidence=95.0),
-            Node(id="n3", label="Bypass Valve",      confidence=95.0),
-            Node(id="n4", label="System Failure",    confidence=95.0),
-        ]
-        edges = [
-            Edge(source="n1", target="n2", relation="OVERLOADS",  confidence=95.0),
-            Edge(source="n3", target="n2", relation="RELIEVES",   confidence=95.0),
-            Edge(source="n3", target="n4", relation="PREVENTS",   confidence=90.0),
-        ]
-    elif "inhibit" in text_lower or "activat" in text_lower:
-        nodes = [
-            Node(id="n1", label="Compound X",  confidence=88.0),
-            Node(id="n2", label="Protein Y",   confidence=88.0),
-            Node(id="n3", label="Pathway Z",   confidence=75.0),
-        ]
-        edges = [
-            Edge(source="n1", target="n2", relation="INHIBITS",  confidence=90.0),
-            Edge(source="n2", target="n3", relation="ACTIVATES", confidence=75.0),
-        ]
-    else:
-        nodes = [
-            Node(id="n_a", label="Primary Factor",   confidence=70.0),
-            Node(id="n_b", label="Secondary Effect", confidence=65.0),
-        ]
-        edges = [
-            Edge(source="n_a", target="n_b", relation="CAUSES", confidence=60.0),
-        ]
-
-    return CausalGraph(nodes=nodes, edges=edges)
+    # --- Fallback (no API key) ---
+    # Fixes ERR-B31: Replaced hardcoded test mocks that poisoned the engine
+    # with a clear, fail-fast exception. Real graph extraction requires an LLM.
+    raise RuntimeError(
+        "Generative extraction failed: ANTHROPIC_API_KEY is missing. "
+        "Cannot reliably extract causal graphs from text without a configured LLM."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -185,19 +152,60 @@ async def evaluate_compatibility_and_transferability(
         transferability = float(data["solution_transferability"])
         return min(1.0, max(0.0, compatibility)), min(1.0, max(0.0, transferability))
 
-    # --- Mock fallback (only used if ANTHROPIC_API_KEY is not set) ---
-    await asyncio.sleep(0.1)
+    # --- Fallback (no API key) ---
+    # Fixes ERR-B32: Replaced the fake semantic overlap calculation 
+    # (word set intersections) with a clear exception. 
+    raise RuntimeError(
+        "Semantic evaluation failed: ANTHROPIC_API_KEY is missing. "
+        "Cannot reliably evaluate constraint compatibility or transferability without a configured LLM."
+    )
 
-    # Score based on semantic overlap between the domain context and candidate
-    context_words = set(domain_context.lower().split())
-    candidate_words = set(candidate_mechanism.lower().split())
-    overlap_ratio = len(context_words & candidate_words) / max(len(context_words), 1)
 
-    # Structural keywords that signal transferability
-    structural_signals = {"bottleneck", "bypass", "flow", "pressure", "load", "failure", "collapse", "converge", "diverge"}
-    structural_overlap = len(structural_signals & candidate_words) / len(structural_signals)
+# ---------------------------------------------------------------------------
+# Function 4: classify_deployment_status
+# Fixes Error B23: Uses LLM to evaluate domain authority instead of hardcoded lists.
+# ---------------------------------------------------------------------------
+async def classify_deployment_status(url: str, snippet: str) -> str:
+    """
+    Layer 3 LLM call: Classifies the deployment status of a web search result.
+    Evaluates the snippet and URL domain to determine engineering authority.
+    """
+    prompt = (
+        f"Analyze the following search result:\nURL: {url}\nSnippet: {snippet}\n\n"
+        "Classify the production deployment evidence into exactly one of these categories:\n"
+        "- 'deployed': Major engineering blogs, clear production deployment at scale (e.g., AWS, Netflix, Uber).\n"
+        "- 'replicated': Proven across multiple studies or companies.\n"
+        "- 'single_study': Authoritative technical publishers or isolated case studies.\n"
+        "- 'blog': Personal blogs, tutorials, or unverified claims.\n"
+        "- 'unknown': Cannot determine.\n\n"
+        "Return ONLY the category name. No explanation."
+    )
 
-    compatibility = min(1.0, 0.5 + overlap_ratio * 0.3 + structural_overlap * 0.2)
-    transferability = min(1.0, 0.4 + structural_overlap * 0.4 + overlap_ratio * 0.2)
+    client = _get_llm_client()
+    if client:
+        # Using litellm's acompletion for proper async behavior if available, else completion
+        try:
+            response = await client.acompletion(
+                model="claude-3-5-sonnet-20241022",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=10
+            )
+        except AttributeError:
+            response = client.completion(
+                model="claude-3-5-sonnet-20241022",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=10
+            )
+        cat = response.choices[0].message.content.strip().lower()
+        # Clean up any potential markdown or punctuation
+        cat = cat.strip("`'\".,\n")
+        valid = {"deployed", "replicated", "single_study", "blog", "unknown"}
+        if cat in valid:
+            return cat
 
-    return round(compatibility, 2), round(transferability, 2)
+    # --- Fallback (no API key) ---
+    raise RuntimeError(
+        "Deployment classification failed: ANTHROPIC_API_KEY is missing. "
+        "Cannot safely classify deployment status without a configured LLM."
+    )
+

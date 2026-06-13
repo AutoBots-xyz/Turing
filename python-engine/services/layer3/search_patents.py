@@ -1,7 +1,9 @@
 import os
 import httpx
+import asyncio
 from typing import List
 from schemas.layer3 import StructuralQuery, SearchResult, SearchSource
+from services.anthropic_client import classify_deployment_status
 
 # Serper.dev API — freemium, thousands of free searches (as specified in different.md)
 SERPER_API_URL = "https://google.serper.dev/patents"
@@ -52,7 +54,16 @@ async def search_patents(query: StructuralQuery) -> List[SearchResult]:
             patents = data.get("patents", [])
             total = len(patents)
 
-            for rank, patent in enumerate(patents):
+            # Fixes ERR-B45: Use LLM for deployment status instead of a hardcoded list of 8 companies
+            classification_tasks = [
+                classify_deployment_status(
+                    p.get("snippet", "") + " Assignee: " + p.get("assignee", "")
+                )
+                for p in patents
+            ]
+            deployment_statuses = await asyncio.gather(*classification_tasks)
+
+            for rank, (patent, deployment_status) in enumerate(zip(patents, deployment_statuses)):
                 title = patent.get("title", "Untitled Patent")
                 snippet = patent.get("snippet", title)
                 link = patent.get("link")
@@ -63,19 +74,10 @@ async def search_patents(query: StructuralQuery) -> List[SearchResult]:
                     f"https://patents.google.com/patent/{patent_number}" if patent_number else None
                 )
 
-                # Patents with "assignee" data are more likely deployed in production
-                assignee = patent.get("assignee", "").lower()
-                is_major_org = any(
-                    org in assignee
-                    for org in ["boeing", "nasa", "pfizer", "google", "microsoft", "amazon", "ge ", "siemens"]
-                )
-                deployment_status = "deployed" if is_major_org else "single_study"
-
-                # Use filing year as a proxy — older patents are more battle-tested
-                year = patent.get("year") or patent.get("priorityDate", "")[:4]
+                # Fixes ERR-B44: Removed fabricated citation proxy math.
+                # Only use real citation counts returned by the API, otherwise default to 0.
                 try:
-                    age = 2025 - int(year)
-                    citation_count = min(500, age * 15)  # Rough proxy for citation accumulation
+                    citation_count = int(patent.get("citedBy", 0))
                 except (ValueError, TypeError):
                     citation_count = 0
 

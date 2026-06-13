@@ -49,7 +49,11 @@ async def run_relation_extraction(results: List[MergedResult]) -> List[Extracted
 
     for (merged, is_contradiction_side), graph_or_exc in zip(task_map, raw_results):
         if isinstance(graph_or_exc, Exception):
-            # Graceful fallback — an empty graph is better than a crashed pipeline
+            # Fixes ERR-B47: Do not swallow critical API configuration errors
+            if isinstance(graph_or_exc, RuntimeError):
+                raise graph_or_exc
+                
+            # Graceful fallback for transient LLM timeouts/failures — an empty graph
             graph = CausalGraph(nodes=[], edges=[])
         else:
             graph = graph_or_exc
