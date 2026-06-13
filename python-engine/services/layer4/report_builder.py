@@ -124,7 +124,7 @@ async def build_report(run_id: str, step14_response: Step14Response) -> FinalRep
         )
 
     # -----------------------------------------------------------------------
-    # Template fallback (no API key)
+    # Template fallback (no API key) - Fixes ERR-B28
     # -----------------------------------------------------------------------
     top = bridges[0]
     top_title = top.match.mechanism.source_result.title
@@ -134,25 +134,19 @@ async def build_report(run_id: str, step14_response: Step14Response) -> FinalRep
     return FinalReport(
         run_id=run_id,
         problem_statement=(
-            f"The target graph exhibits a structural bottleneck pattern that matches "
-            f"the mechanism described in '{top_title}'."
+            "AI generative reporting unavailable. Displaying top-ranked structural match."
         ),
         top_bridges=bridges,
         executive_summary=(
-            f"The highest-ranked cross-domain bridge (score: {top_score:.2%}) was found in "
-            f"'{top_title}'. Summary: {top_summary} "
-            f"This mechanism has been independently validated across "
-            f"{len(top.match.mechanism.source_result.sources)} source type(s), "
-            f"suggesting the solution approach is transferable to the target domain."
+            f"[SYSTEM NOTICE: Generative reporting disabled due to missing LLM configuration]\n\n"
+            f"Top Structural Match: {top_title}\n"
+            f"Match Score: {top_score:.2%}\n"
+            f"Raw Mechanism Summary: {top_summary}"
         ),
         recommended_experiment=(
             top.match.mechanism.source_result.contradiction_analysis.recommended_experiment
             if top.match.mechanism.source_result.contradiction_analysis
-            else (
-                "Design a controlled A/B experiment comparing baseline behaviour "
-                "against the intervention proposed by the top bridge. "
-                "Measure the primary output metric under both conditions with identical inputs."
-            )
+            else "AI generative recommendations unavailable. Please review the raw mechanism above to design a validation experiment."
         ),
         contradiction_warnings=contradiction_warnings,
         confidence_disclaimer=confidence_disclaimer,

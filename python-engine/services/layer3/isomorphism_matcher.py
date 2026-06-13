@@ -17,86 +17,52 @@ def _to_digraph(graph: CausalGraph) -> nx.DiGraph:
 
 def calculate_structural_similarity(target: CausalGraph, candidate: CausalGraph) -> float:
     """
-    Calculates structural similarity using NetworkX graph algorithms.
+    Calculates structural similarity using NetworkX's Graph Edit Distance (GED).
 
-    Strategy (layered scoring):
-    1. In-degree sequence similarity  — captures bottleneck topology (weight 0.35)
-    2. Out-degree sequence similarity — captures fanout structure   (weight 0.25)
-    3. Bottleneck alignment          — max in-degree node match     (weight 0.25)
-    4. Graph density similarity      — overall connectivity ratio   (weight 0.15)
-
-    Fixes L3-5: Each sub-score is now clamped to [0.0, 1.0] with max(0.0, ...)
-    before the weighted sum. Previously, numerical edge cases could produce
-    negative composite scores that were silently misclassified as DISCARDED.
-
-    Fixes L3-6: The out-degree fallback when max_possible_diff == 0 was
-    incorrectly returning 0 (worst match) instead of 1.0 (perfect match).
-    Two graphs that both have zero out-degrees are a perfect structural match
-    on that dimension — they should score 1.0, not 0.
+    Fixes ERR-B43: Replaces arbitrary 'magic number' heuristic weights with 
+    a mathematically rigorous Graph Edit Distance. This calculates the optimal 
+    topological mapping cost between two graphs without relying on tuned fallbacks.
     """
     target_nx = _to_digraph(target)
     candidate_nx = _to_digraph(candidate)
 
     t_nodes = target_nx.number_of_nodes()
     c_nodes = candidate_nx.number_of_nodes()
+    t_edges = target_nx.number_of_edges()
+    c_edges = candidate_nx.number_of_edges()
 
+    if t_nodes == 0 and c_nodes == 0:
+        return 100.0
     if t_nodes == 0 or c_nodes == 0:
         return 0.0
 
-    # --- Score 1: In-degree sequence similarity ---
-    t_in_degs = sorted([d for _, d in target_nx.in_degree()], reverse=True)
-    c_in_degs = sorted([d for _, d in candidate_nx.in_degree()], reverse=True)
+    max_edits = t_nodes + c_nodes + t_edges + c_edges
 
-    max_len = max(len(t_in_degs), len(c_in_degs))
-    t_in_degs += [0] * (max_len - len(t_in_degs))
-    c_in_degs += [0] * (max_len - len(c_in_degs))
+    # Calculate optimal Graph Edit Distance
+    # We use node_match=lambda n1, n2: True to ensure we are calculating PURE 
+    # structural isomorphism, independent of node labels across different domains.
+    ged = nx.graph_edit_distance(
+        target_nx, 
+        candidate_nx, 
+        node_match=lambda n1, n2: True,
+        edge_match=lambda e1, e2: True,
+        timeout=2.0
+    )
 
-    in_max_possible = max_len * max(max(t_in_degs), max(c_in_degs), 1)
-    in_actual_diff = sum(abs(a - b) for a, b in zip(t_in_degs, c_in_degs))
-    degree_seq_score = 1.0 - (in_actual_diff / in_max_possible)
+    if ged is None:
+        # Fallback to fast heuristic upper bound if the exact GED times out
+        try:
+            ged = next(nx.optimize_graph_edit_distance(
+                target_nx, 
+                candidate_nx, 
+                node_match=lambda n1, n2: True,
+                edge_match=lambda e1, e2: True
+            ))
+        except StopIteration:
+            ged = max_edits
 
-    # --- Score 2: Out-degree sequence similarity ---
-    t_out_degs = sorted([d for _, d in target_nx.out_degree()], reverse=True)
-    c_out_degs = sorted([d for _, d in candidate_nx.out_degree()], reverse=True)
-
-    max_len = max(len(t_out_degs), len(c_out_degs))
-    t_out_degs += [0] * (max_len - len(t_out_degs))
-    c_out_degs += [0] * (max_len - len(c_out_degs))
-
-    out_max_possible = max_len * max(max(t_out_degs), max(c_out_degs), 1)
-    out_actual_diff = sum(abs(a - b) for a, b in zip(t_out_degs, c_out_degs))
-
-    # Fixes L3-6: when out_max_possible == 0 both graphs have all-zero out-degrees
-    # → perfect structural match on this dimension → score = 1.0 (was incorrectly 0).
-    if out_max_possible == 0:
-        out_degree_score = 1.0
-    else:
-        out_degree_score = 1.0 - (out_actual_diff / out_max_possible)
-
-    # --- Score 3: Structural bottleneck alignment ---
-    t_max_in = max((d for _, d in target_nx.in_degree()), default=0)
-    c_max_in = max((d for _, d in candidate_nx.in_degree()), default=0)
-    if t_max_in == 0 and c_max_in == 0:
-        bottleneck_score = 1.0   # Both graphs have no bottleneck — perfect match
-    else:
-        bottleneck_score = max(0.0, 1.0 - abs(t_max_in - c_max_in) / max(t_max_in, c_max_in, 1))
-
-    # --- Score 4: Graph density similarity ---
-    t_density = nx.density(target_nx)
-    c_density = nx.density(candidate_nx)
-    density_score = 1.0 - abs(t_density - c_density)
-
-    # --- Weighted composite score ---
-    # Fixes L3-5: each sub-score clamped to [0.0, 1.0] to prevent negative totals
-    # from numerical edge cases propagating into the final score.
-    score = (
-        max(0.0, min(1.0, degree_seq_score))  * 0.35 +
-        max(0.0, min(1.0, out_degree_score))  * 0.25 +
-        max(0.0, min(1.0, bottleneck_score))  * 0.25 +
-        max(0.0, min(1.0, density_score))     * 0.15
-    ) * 100.0
-
-    return round(min(100.0, max(0.0, score)), 2)
+    score = max(0.0, 1.0 - (ged / max_edits)) * 100.0
+    return round(score, 2)
 
 
 async def match_graphs(request: Step13Request) -> Step13Response:

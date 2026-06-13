@@ -65,52 +65,12 @@ def run_pc_algorithm(content: dict) -> CausalGraph:
 
         return CausalGraph(nodes=nodes, edges=edges)
 
-    except ImportError:
-        # causal-learn not installed — return a heuristic correlation graph
-        return _fallback_correlation_graph(columns, matrix)
-
-
-def _fallback_correlation_graph(columns: List[str], matrix: List[List[float]]) -> CausalGraph:
-    """
-    Fallback when causal-learn is unavailable: builds a graph based on
-    Pearson correlation.
-    """
-    import statistics
-
-    nodes = [Node(id=col, label=col, confidence=50.0) for col in columns]
-    edges = []
-    n = len(columns)
-    num_rows = len(matrix)
-
-    if num_rows < 2:
-        return CausalGraph(nodes=nodes, edges=[])
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            col_i = [matrix[r][i] for r in range(num_rows)]
-            col_j = [matrix[r][j] for r in range(num_rows)]
-
-            mean_i = statistics.mean(col_i)
-            mean_j = statistics.mean(col_j)
-            std_i = statistics.stdev(col_i) if len(col_i) > 1 else 1.0
-            std_j = statistics.stdev(col_j) if len(col_j) > 1 else 1.0
-
-            if std_i == 0 or std_j == 0:
-                continue
-
-            cov = sum((col_i[r] - mean_i) * (col_j[r] - mean_j) for r in range(num_rows)) / num_rows
-            r = cov / (std_i * std_j)
-
-            if abs(r) > 0.5:
-                confidence = round(abs(r) * 100, 1)
-                edges.append(Edge(
-                    source=columns[i],
-                    target=columns[j],
-                    relation="CORRELATES_WITH",
-                    confidence=confidence,
-                ))
-
-    return CausalGraph(nodes=nodes, edges=edges)
+    except ImportError as e:
+        # Fixes ERR-B39: Replaced "Correlation is Causation" fallback with fail-fast exception.
+        raise ImportError(
+            "Mathematical causal discovery failed: 'causal-learn' is not installed. "
+            "The PC Algorithm requires this library to reliably infer causation (correlation is not causation)."
+        ) from e
 
 # ==============================================================================
 # 2. ADVANCED NETWORKX EXTRACTION (Harsh)

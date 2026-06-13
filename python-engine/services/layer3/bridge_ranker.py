@@ -10,61 +10,30 @@ from services.anthropic_client import evaluate_compatibility_and_transferability
 def calculate_evidence_strength(match: IsomorphismMatch) -> float:
     """
     Factor 4: Evidence Strength
-    Dynamically scores evidence quality based on real signals from SearchResult
-    — citation count, replication count, and deployment status — rather than
-    static hardcoded floats per source type.
-
-    Scoring table (from layer 3.md):
-    - Patent deployed by major org in production → highest (0.95)
-    - Paper replicated 5+ times → very high (0.75)
-    - Paper cited 100+ times → high (0.62)
-    - Single unreplicated paper → low (0.55)
-    - Blog post → very low (0.20)
+    Fixes ERR-B24: Replaces arbitrary hardcoded "magic numbers" with a 
+    statistically grounded Noisy-OR probability model. We treat each 
+    source (and its replications) as independent probabilistic evidence.
     """
     source_results = match.mechanism.source_result.source_results
 
-    best_score = 0.0
+    if not source_results:
+        return 0.05
+
+    combined_p_failure = 1.0
     for result in source_results:
-        score = 0.0
+        # Treat the base confidence as a probability [0.0, 1.0]
+        p = max(0.0, min(100.0, result.confidence)) / 100.0
+        
+        # Each independent replication acts as an additional independent trial
+        trials = 1 + result.replication_count
+        
+        # Noisy-OR combination
+        combined_p_failure *= ((1.0 - p) ** trials)
 
-        # Base score from source type
-        if result.source == SearchSource.PATENT:
-            score = 0.70
-        elif result.source == SearchSource.PAPER:
-            score = 0.55
-        elif result.source == SearchSource.WIKIPEDIA:
-            score = 0.45
-        elif result.source == SearchSource.WEB:
-            score = 0.30
+    evidence_score = 1.0 - combined_p_failure
 
-        # Boost from deployment status
-        if result.deployment_status == "deployed":
-            score += 0.25
-        elif result.deployment_status == "replicated":
-            score += 0.15
-        elif result.deployment_status == "single_study":
-            score += 0.00
-        elif result.deployment_status == "blog":
-            score -= 0.10
-
-        # Boost from citation count (capped at 0.10)
-        if result.citation_count >= 500:
-            score += 0.10
-        elif result.citation_count >= 100:
-            score += 0.07
-        elif result.citation_count >= 10:
-            score += 0.03
-
-        # Boost from independent replication (capped at 0.05)
-        if result.replication_count >= 5:
-            score += 0.05
-        elif result.replication_count >= 2:
-            score += 0.02
-
-        best_score = max(best_score, score)
-
-    # Clamp to [0.05, 1.0]
-    return round(min(1.0, max(0.05, best_score)), 3)
+    # Clamp to [0.05, 1.0] to avoid zeroing out the entire geometric product
+    return round(max(0.05, evidence_score), 3)
 
 
 async def rank_bridges(request: Step14Request) -> Step14Response:
@@ -108,9 +77,9 @@ async def rank_bridges(request: Step14Request) -> Step14Response:
 
     ranked_bridges = []
     for match, llm_result in zip(valid_matches, llm_scores):
-        # Gracefully handle any LLM failures — don't let one bad result kill the whole pipeline
+        # Gracefully handle any LLM failures — Fixes ERR-B25: Do not swallow silently!
         if isinstance(llm_result, Exception):
-            compatibility, transferability = 0.5, 0.5
+            raise RuntimeError(f"LLM evaluation failed during bridge ranking: {llm_result}") from llm_result
         else:
             compatibility, transferability = llm_result
 

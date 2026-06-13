@@ -12,21 +12,28 @@ MAX_RESULTS = 5
 def _deployment_status_from_citations(citation_count: int) -> str:
     """Derives deployment status from citation count as a replication proxy."""
     if citation_count >= 500:
-        return "replicated"
+        return "deployed"
     elif citation_count >= 50:
+        return "replicated"
+    elif citation_count >= 10:
         return "single_study"
     else:
-        return "single_study"
+        return "unknown"
 
 
-def _confidence_from_rank(rank: int, total: int) -> float:
+def _calculate_confidence(rank: int, citation_count: int) -> float:
     """
-    Converts API result rank into a confidence score.
-    Top result = highest confidence, last result = minimum 60%.
+    Computes a mathematically grounded confidence score using a 
+    bounded sigmoid function on citation counts, penalized by search rank.
     """
-    if total <= 1:
-        return 90.0
-    return round(90.0 - (rank / max(total - 1, 1)) * 30.0, 1)
+    import math
+    # Logistic growth based on citations (0 citations -> 50%, 100+ citations -> ~95%)
+    k = 0.05
+    base_confidence = 50.0 + 45.0 * (2 / (1 + math.exp(-k * citation_count)) - 1)
+    
+    # Exponential decay penalty based on search rank
+    rank_penalty = math.exp(-0.1 * rank)
+    return round(max(0.0, min(100.0, base_confidence * rank_penalty)), 1)
 
 
 async def search_papers(query: StructuralQuery) -> List[SearchResult]:
@@ -72,7 +79,7 @@ async def search_papers(query: StructuralQuery) -> List[SearchResult]:
                     elif arxiv_id:
                         url = f"https://arxiv.org/abs/{arxiv_id}"
 
-                confidence = _confidence_from_rank(rank, total)
+                confidence = _calculate_confidence(rank, citation_count)
                 deployment_status = _deployment_status_from_citations(citation_count)
                 replication_count = max(0, (citation_count - 10) // 50)
 

@@ -135,15 +135,12 @@ class HeatmapGenerator:
                 interventions.update(steady_values)
 
                 sim_res = self.simulator.simulate(payload.nodes, payload.edges, interventions)
-                pred = sim_res.predictions.get(
-                    sink_node_name,
-                    GaussianPrediction(mean=0.0, std_dev=1.0)
-                )
+                pred = sim_res.predictions.get(sink_node_name)
 
                 data_points.append(HeatmapPoint(
                     x_val=round(float(x_val), 2),
                     y_val=round(float(y_val if not single_axis else x_val), 2),
-                    z_val=round(pred.mean, 2),
+                    z_val=round(pred.mean, 2) if pred else None,
                     is_cliff=False
                 ))
 

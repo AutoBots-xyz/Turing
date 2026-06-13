@@ -68,26 +68,10 @@ class AgentFactory:
             )
             return response.choices[0].message.content.strip()
 
-        # --- Smart mock fallback (not keyword matching) ---
-        # Compare each source's summary against the proposer's content word-set
-        proposer_words = set(proposer_argument.lower().split())
-        for result in results:
-            # Look for directional contradictions: opposite action verbs
-            contradiction_pairs = [
-                ("inhibit", "activat"), ("increas", "decreas"),
-                ("prevent", "caus"), ("widen", "narrow"),
-                ("bypass", "block"), ("prevent", "allow"),
-            ]
-            summary_words = result.summary.lower()
-            proposer_text = proposer_argument.lower()
-            for word_a, word_b in contradiction_pairs:
-                if (word_a in proposer_text and word_b in summary_words) or \
-                   (word_b in proposer_text and word_a in summary_words):
-                    return (
-                        f"REJECTED. Data contradiction found in [{result.source.value}]: "
-                        f"{result.summary}"
-                    )
-        return "ACCEPTED. No direct contradictions found in other sources."
+        # --- Fallback (no API key) ---
+        # Fixes ERR-B29: Removed brittle string-matching hack. 
+        # Without an LLM, we cannot safely detect mechanistic contradictions.
+        return "ACCEPTED. No direct contradictions found in other sources (Adversarial check bypassed)."
 
     @staticmethod
     async def run_synthesizer(
@@ -130,15 +114,10 @@ class AgentFactory:
                 consensus = data.get("consensus", "Conflict confirmed between sources.")
                 experiment = data.get("experiment", "Design a controlled comparative experiment.")
             else:
-                # Smart fallback — extracts the conflicting claim from the skeptic's rebuttal
-                # to produce a contextually relevant (not hardcoded) experiment suggestion
-                conflict_snippet = skeptic_arg.replace("REJECTED. Data contradiction found in ", "")
-                consensus = f"Sources disagree on mechanism direction: {conflict_snippet[:120]}"
-                experiment = (
-                    f"Design a controlled A/B experiment comparing the mechanism proposed "
-                    f"by the primary source against the contradicting approach: {conflict_snippet[:80]}. "
-                    f"Measure the output metric under both conditions with identical inputs."
-                )
+                # Fixes ERR-B30: Transparent fallback instead of fake generative strings.
+                # Do not pretend to synthesize a bespoke experiment without an LLM.
+                consensus = "[SYSTEM NOTICE: AI Synthesizer unavailable. Conflict unresolved.]"
+                experiment = "[SYSTEM NOTICE: AI experiment generation unavailable due to missing LLM configuration. Manual review required.]"
 
             nature = skeptic_arg.replace("REJECTED. ", "")
         else:

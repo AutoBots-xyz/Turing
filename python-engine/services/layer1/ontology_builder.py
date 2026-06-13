@@ -78,49 +78,11 @@ async def build_ontology_from_text(content: dict) -> CausalGraph:
         ]
         return CausalGraph(nodes=nodes, edges=edges)
 
-    # Heuristic fallback
-    return _keyword_graph(text_excerpt)
-
-
-def _keyword_graph(text: str) -> CausalGraph:
-    """Builds a simple heuristic graph from causal keyword pairs."""
-    causal_patterns = [
-        (r"(\w[\w\s]{1,30})\s+causes\s+([\w\s]{1,30})", "CAUSES"),
-        (r"(\w[\w\s]{1,30})\s+leads to\s+([\w\s]{1,30})", "CAUSES"),
-        (r"(\w[\w\s]{1,30})\s+results in\s+([\w\s]{1,30})", "CAUSES"),
-        (r"(\w[\w\s]{1,30})\s+inhibits\s+([\w\s]{1,30})", "INHIBITS"),
-        (r"(\w[\w\s]{1,30})\s+activates\s+([\w\s]{1,30})", "ACTIVATES"),
-        (r"(\w[\w\s]{1,30})\s+prevents\s+([\w\s]{1,30})", "PREVENTS"),
-        (r"(\w[\w\s]{1,30})\s+increases\s+([\w\s]{1,30})", "INCREASES"),
-        (r"(\w[\w\s]{1,30})\s+decreases\s+([\w\s]{1,30})", "DECREASES"),
-    ]
-
-    node_map: dict[str, str] = {}  # label → id
-    nodes = []
-    edges = []
-    node_counter = 1
-
-    def get_or_create_node(label: str) -> str:
-        label = label.strip().title()
-        if label not in node_map:
-            nid = f"n{node_counter}"
-            nonlocal node_counter
-            node_map[label] = nid
-            nodes.append(Node(id=nid, label=label, confidence=50.0))
-            node_counter += 1
-        return node_map[label]
-
-    for pattern, relation in causal_patterns:
-        for match in re.finditer(pattern, text, re.IGNORECASE):
-            src_label = match.group(1).strip()
-            tgt_label = match.group(2).strip()
-            if len(src_label) < 2 or len(tgt_label) < 2:
-                continue
-            src_id = get_or_create_node(src_label)
-            tgt_id = get_or_create_node(tgt_label)
-            edges.append(Edge(source=src_id, target=tgt_id, relation=relation, confidence=55.0))
-
-    return CausalGraph(nodes=nodes, edges=edges)
+    # Fixes ERR-B37: Replaced brittle regex heuristic fallback with a fail-fast exception.
+    raise RuntimeError(
+        "Generative causal graph extraction failed: ANTHROPIC_API_KEY is missing. "
+        "Cannot reliably extract causal graphs from text without a configured LLM."
+    )
 
 # ==============================================================================
 # 2. DUAL-STAGE ADVANCED LLM EXTRACTION (Harsh)
@@ -209,12 +171,8 @@ class LLMGraphBuilder:
             content = response.choices[0].message.content
             return json.loads(content)
         except Exception as e:
-            logger.error(f"Ontology generation failed: {e}")
-            # Fallback ontology
-            return {
-                "entity_types": ["VARIABLE", "METRIC", "COMPONENT"],
-                "relation_types": ["CAUSES", "INHIBITS", "ACTIVATES", "CORRELATES_WITH"]
-            }
+            # Fixes ERR-B38: Do not silently swallow exceptions and inject fake ontologies.
+            raise RuntimeError(f"Generative ontology schema creation failed: {e}") from e
 
     @staticmethod
     def _extract_causal_edges(text: str, ontology: dict, model_name: str) -> list:
