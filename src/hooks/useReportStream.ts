@@ -75,5 +75,5 @@ export function useReportStream(runId: string) {
     };
   }, [runId]);
 
-  return { report, error, isConnected };
+  return { report, error, isConnected, isLoading: !report && isConnected };
 }

@@ -4,13 +4,13 @@ import { HypothesisNode, ConnectorLine } from '@/types/layer2';
 // ─── HypothesisNode Component ───────────────────────────────────────────────
 
 const HypothesisNodeView: React.FC<HypothesisNode> = ({
-  id, variant, label, title, description, x, y, mechanism,
+  id, variant, label, title, description, x, y, mechanism, delayMs = 0
 }) => {
-  // Elements animate instantly upon mounting from the SSE stream
-  const baseClasses = "absolute animate-fade-node z-20";
+  const baseClasses = "absolute opacity-0 animate-fade-node z-20";
   const style = { 
     left: `${x}px`, 
     top: `${y}px`,
+    animationDelay: `${delayMs}ms`
   };
 
   if (variant === 'synthesized') {
@@ -48,6 +48,21 @@ const HypothesisNodeView: React.FC<HypothesisNode> = ({
     );
   }
 
+  if (variant === 'exploiter') {
+    return (
+      <div id={id} className={`${baseClasses} w-[500px] bg-white border border-orange-500 p-6 shadow-sm`} style={style}>
+        <div className="absolute -top-3 -left-3 bg-orange-500 text-white font-mono text-[9px] px-2 py-1 font-bold">{label}</div>
+        <div className="font-bold text-lg mb-2 text-black">{title}</div>
+        <div className="font-mono text-xs text-gray-500">{description}</div>
+        {mechanism && (
+          <div className="mt-3 font-mono text-xs text-orange-600 bg-orange-50 p-2 border border-orange-200">
+            <span className="font-bold">MECHANISM: </span>{mechanism}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div id={id} className={`${baseClasses} w-[500px] bg-white border border-gray-300 p-6 shadow-sm`} style={style}>
       <div className="absolute -top-3 -left-3 bg-black text-white font-mono text-[9px] px-2 py-1 font-bold">{label}</div>
@@ -73,7 +88,7 @@ const ConnectorLinesView: React.FC<{ lines: ConnectorLine[] }> = ({ lines }) => 
         const pathId = `line-${line.id}`;
         const d = line.variant === 'tree' 
           ? `M ${line.x1} ${line.y1} L ${line.x2} ${line.y2}`
-          : `M ${line.x1} ${line.y1} C ${(line.x1 + line.x2) / 2} ${line.y1}, ${(line.x1 + line.x2) / 2} ${line.y2}, ${line.x2} ${line.y2}`;
+          : `M ${line.x1} ${line.y1} L ${(line.x1 + line.x2) / 2} ${line.y1} L ${(line.x1 + line.x2) / 2} ${line.y2} L ${line.x2} ${line.y2}`;
 
         return (
           <path
@@ -83,8 +98,9 @@ const ConnectorLinesView: React.FC<{ lines: ConnectorLine[] }> = ({ lines }) => 
             strokeWidth={strokeWidth} 
             fill="none"
             strokeDasharray={isDashed ? "4,4" : "1000"} 
-            strokeDashoffset={isDashed ? "0" : "0"}
+            strokeDashoffset={isDashed ? "0" : "1000"}
             className={isDashed ? "animate-fade-node" : "animate-draw-line"}
+            style={{ animationDelay: `${line.delayMs || 0}ms` }}
           />
         );
       })}

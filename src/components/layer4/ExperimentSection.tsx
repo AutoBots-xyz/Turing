@@ -15,7 +15,7 @@ export const ExperimentSection: React.FC<ExperimentSectionProps> = ({
     <div className="mb-10 w-full brutal-box bg-white border-2 border-black p-8 shadow-[8px_8px_0px_rgba(0,0,0,0.1)]">
       <div className="flex justify-between items-center mb-6 border-b-2 border-black pb-4">
         <h2 className="font-mono text-xl font-bold tracking-widest text-black flex items-center gap-3">
-          <span className="text-[#1A936F]">03 //</span> EXPERIMENTAL VALIDATION
+          <span className="text-[#1A936F]">02 //</span> THE EXPERIMENT
         </h2>
         {isStreaming && (
           <div className="flex items-center gap-2">

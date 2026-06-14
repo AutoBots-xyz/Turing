@@ -42,21 +42,62 @@ export const AgentStatusPanel: React.FC = () => {
   const runId = Array.isArray(rawId) ? rawId[0] : rawId || '';
   const { state, error } = useAgentLoop(runId);
 
-  // Auto-scroll logic: gracefully scroll to bottom when new agents are streamed in,
-  // but only if the user hasn't manually scrolled up to inspect history.
+  // Auto-scroll logic: gracefully scroll to bottom matching the CSS animation timeline
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !state?.agents?.length) return;
 
-    const isScrolledToBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 150;
+    // Find the total duration of the CSS animation sequence
+    const nodes = state.heatmapNodes || [];
+    const maxDelay = Math.max(...nodes.map(n => n.delayMs || 0), 0);
+    if (maxDelay === 0) return;
+
+    const targetScroll = container.scrollHeight - container.clientHeight;
     
-    if (isScrolledToBottom) {
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: 'smooth'
-      });
+    let startTime: number | null = null;
+    let animationFrame: number;
+    let userInterrupted = false;
+    
+    // Allow user to interrupt the animation by scrolling
+    const handleUserInterrupt = () => {
+      userInterrupted = true;
+    };
+    
+    container.addEventListener('wheel', handleUserInterrupt, { passive: true });
+    container.addEventListener('touchstart', handleUserInterrupt, { passive: true });
+    container.addEventListener('mousedown', handleUserInterrupt, { passive: true });
+    
+    const animateScroll = (timestamp: number) => {
+      if (userInterrupted || !container) return;
+      
+      if (!startTime) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+      
+      // Calculate scroll progress. Extended by 5000ms to ensure it keeps moving 
+      // while the final agents are 'talking' (fading in and rendering).
+      const duration = maxDelay + 5000;
+      const percentage = Math.min(elapsed / duration, 1);
+      
+      // Linear scroll down
+      container.scrollTop = percentage * targetScroll;
+      
+      if (percentage < 1) {
+        animationFrame = requestAnimationFrame(animateScroll);
+      }
+    };
+    
+    // Start animation if we are at the top (fresh stream)
+    if (container.scrollTop < 100) {
+        animationFrame = requestAnimationFrame(animateScroll);
     }
-  }, [state?.agents?.length]);
+    
+    return () => {
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+      container.removeEventListener('wheel', handleUserInterrupt);
+      container.removeEventListener('touchstart', handleUserInterrupt);
+      container.removeEventListener('mousedown', handleUserInterrupt);
+    };
+  }, [state?.agents?.length, state?.heatmapNodes]);
 
   const agents = state?.agents || [];
   const nodes = state?.heatmapNodes || [];

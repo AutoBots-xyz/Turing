@@ -12,7 +12,7 @@ export const WarningsSection: React.FC<WarningsSectionProps> = ({ warnings = [] 
     <div className="mb-10 w-full brutal-box bg-[#FEF2F2] border-2 border-red-500 p-8 shadow-[8px_8px_0px_rgba(220,38,38,0.15)]">
       <div className="flex justify-between items-center mb-6 border-b-2 border-red-200 pb-4">
         <h2 className="font-mono text-xl font-bold tracking-widest text-red-600 flex items-center gap-3 uppercase">
-          <span>! //</span> IDENTIFIED RISKS & LIMITATIONS
+          <span>04 //</span> WARNINGS & CONFLICTS
         </h2>
       </div>
 

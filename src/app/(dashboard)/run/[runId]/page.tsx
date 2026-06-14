@@ -21,7 +21,7 @@ import { SearchStatusPanel } from "@/components/layer3/SearchStatusPanel";
 // Official layer4 components (report is composed from layer4 sub-components)
 import { ReportNav } from "@/components/layer4/ReportNav";
 import { StreamingReport } from "@/components/layer4/StreamingReport";
-import { ActionsPanel } from "@/components/layer4/ActionsPanel";
+
 
 export default function PipelineRunPage() {
   const router = useRouter();
@@ -107,7 +107,6 @@ export default function PipelineRunPage() {
         <div className={`w-full h-full animate-fade-in flex flex-col bg-[#F3F4F6] ${activeTab === "report" ? "flex" : "hidden"}`}>
           <div className="w-full h-full max-w-4xl mx-auto pt-16 bg-white border-x border-[#E5E5E5] px-16 overflow-y-auto relative flex flex-col items-start shadow-sm">
             <StreamingReport />
-            <ActionsPanel />
           </div>
         </div>
 

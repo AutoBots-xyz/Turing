@@ -16,25 +16,28 @@ export const ExperimentHistoryTable: React.FC<{ entries: AgentEntry[] }> = ({ en
   );
 };
 
-const AgentTimelineItem: React.FC<AgentEntry> = ({ type, agentId, y, content }) => {
+const AgentTimelineItem: React.FC<AgentEntry & { delayMs?: number }> = ({ type, agentId, y, content, delayMs = 0 }) => {
   const colorMap = {
     explorer: 'text-[#1A936F]',
     exploiter: 'text-[#004E89]',
     contrarian: 'text-[#C5283D]',
+    skeptic: 'text-[#C5283D]', // added skeptic fallback
   };
+
+  const colorClass = colorMap[type as keyof typeof colorMap] || 'text-[#1A936F]';
 
   return (
     <div 
-      className="absolute left-6 w-[240px] z-20 flex flex-col animate-fade-in"
-      style={{ top: y }}
+      className="absolute left-6 w-[220px] z-20 flex flex-col opacity-0 animate-fade-node"
+      style={{ top: y, animationDelay: `${delayMs}ms` }}
     >
       <div className="flex items-center gap-2 mb-1">
-        <div className={`w-2 h-2 rounded-full ${colorMap[type].replace('text-', 'bg-')}`} />
-        <span className={`font-mono text-[10px] font-bold ${colorMap[type]}`}>
+        <div className={`w-2 h-2 rounded-full ${colorClass.replace('text-', 'bg-')}`} />
+        <span className={`font-mono text-[10px] font-bold ${colorClass}`}>
           {agentId} [{type.toUpperCase()}]
         </span>
       </div>
-      <div className="text-[12px] text-gray-700 leading-snug border-l-2 border-gray-200 pl-3 ml-1 mt-1 font-sans">
+      <div className="text-[10px] text-gray-600 leading-snug border-l-2 border-gray-200 pl-3 ml-1 mt-1 font-mono">
         {content}
       </div>
     </div>
