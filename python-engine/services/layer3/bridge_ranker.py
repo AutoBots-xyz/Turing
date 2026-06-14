@@ -1,4 +1,7 @@
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 from schemas.layer3 import (
     Step14Request, Step14Response, IsomorphismMatch, MatchType,
@@ -82,7 +85,7 @@ async def rank_bridges(request: Step14Request) -> Step14Response:
         # Sort by isomorphism score to find the best match's summary
         best_match = max(valid_matches, key=lambda m: m.isomorphism_score)
         domain_context = best_match.mechanism.source_result.merged_summary
-        print(
+        logger.warning(
             "[bridge_ranker] WARNING: user_domain_context was empty. "
             "Falling back to top-match summary as LLM context."
         )

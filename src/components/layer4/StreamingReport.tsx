@@ -12,15 +12,16 @@ export const StreamingReport: React.FC = () => {
   const params = useParams();
   const rawId = params?.runId;
   const runId = Array.isArray(rawId) ? rawId[0] : rawId || '';
-  const { report, isLoading } = useReportStream(runId);
+  const { report, isConnected } = useReportStream(runId);
+  const isLoading = report === null && isConnected;
 
   // If report is null, we are totally waiting for the stream to begin
   const isGlobalStreaming = report ? !report.isComplete : true;
 
   // Determine which section is currently "active" in the stream based on population
-  const hasMech = report?.mechanismExplanation && report.mechanismExplanation.length > 0;
-  const hasBridge = report?.bridgeSummary && report.bridgeSummary.length > 0;
-  const hasExp = report?.experimentResults && report.experimentResults.length > 0;
+  const hasMech = !!(report?.mechanismExplanation && report.mechanismExplanation.length > 0);
+  const hasBridge = !!(report?.bridgeSummary && report.bridgeSummary.length > 0);
+  const hasExp = !!(report?.experimentResults && report.experimentResults.length > 0);
 
   const isMechStreaming = isGlobalStreaming && !hasBridge;
   const isBridgeStreaming = isGlobalStreaming && hasMech && !hasExp;

@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { RunState } from '../types/run';
 import { apiUrl } from '@/lib/api';
 
+/** How often (ms) to poll the backend for the global run state. */
+const POLL_INTERVAL_MS = 1500;
+
 export function useRunState(runId: string) {
   const [runState, setRunState] = useState<RunState | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -39,7 +42,7 @@ export function useRunState(runId: string) {
 
     // Master polling loop every 1.5 seconds to sync the overarching Next.js shell
     // This orchestrates the auto-advancement of TopNav and LayerProgress.
-    intervalId = setInterval(fetchRunState, 1500);
+    intervalId = setInterval(fetchRunState, POLL_INTERVAL_MS);
 
     return () => {
       isMounted = false;

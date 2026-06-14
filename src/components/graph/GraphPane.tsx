@@ -56,8 +56,8 @@ export const GraphPane: React.FC = () => {
         headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) throw new Error(`Layer 1 API failed: ${res.statusText}`);
-    } catch (err: any) {
-      setError(err.message || "Network error triggering Layer 1 Causal Discovery");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error triggering Layer 1 Causal Discovery");
     }
   };
 
@@ -69,8 +69,8 @@ export const GraphPane: React.FC = () => {
         headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) throw new Error(`Layer 2 API failed: ${res.statusText}`);
-    } catch (err: any) {
-      setError(err.message || "Network error triggering Layer 2 Bottleneck Resolution");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error triggering Layer 2 Bottleneck Resolution");
     }
   };
 
@@ -82,8 +82,8 @@ export const GraphPane: React.FC = () => {
         headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) throw new Error(`Layer 3 API failed: ${res.statusText}`);
-    } catch (err: any) {
-      setError(err.message || "Network error triggering Layer 3 Isomorphism Search");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error triggering Layer 3 Isomorphism Search");
     }
   };
 
@@ -107,7 +107,7 @@ export const GraphPane: React.FC = () => {
       )}
 
       {/* Show a clear error overlay when Layer 1 fails */}
-      {runState?.layer1Status === 'failed' && (
+      {runState?.layer1Status === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-40 bg-[#F5F5F5]/95">
           <div className="bg-white border-2 border-red-500 p-8 shadow-[8px_8px_0px_rgba(220,38,38,0.3)] w-[480px]">
             <div className="flex items-center gap-3 mb-4">
@@ -135,7 +135,7 @@ export const GraphPane: React.FC = () => {
       )}
 
       {/* Show progress overlay while Layer 1 is building the graph */}
-      {(runState?.layer1Status === 'processing' || runState?.layer1Status === 'pending') && runState?.layer1Progress !== undefined && runState.layer1Progress > 0 && (
+      {(runState?.layer1Status === 'running' || runState?.layer1Status === 'idle') && runState?.layer1Progress !== undefined && runState.layer1Progress > 0 && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-40 bg-[#F5F5F5]/90 backdrop-blur-sm">
           <div className="bg-white border-2 border-black p-8 shadow-[8px_8px_0px_rgba(0,0,0,1)] w-[420px]">
             {/* Title */}

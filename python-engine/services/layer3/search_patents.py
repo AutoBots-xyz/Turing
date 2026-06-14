@@ -1,4 +1,7 @@
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 import httpx
 from typing import List
 from schemas.layer3 import StructuralQuery, SearchResult, SearchSource
@@ -31,7 +34,7 @@ async def search_patents(query: StructuralQuery) -> List[SearchResult]:
     results: List[SearchResult] = []
 
     if not api_key:
-        print("[search_patents] SERPER_API_KEY not set. Returning empty results.")
+        logger.warning("[search_patents] SERPER_API_KEY not set. Returning empty results.")
         return results
 
     headers = {
@@ -88,6 +91,6 @@ async def search_patents(query: StructuralQuery) -> List[SearchResult]:
                 ))
 
     except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        print(f"[search_patents] Serper.dev API error: {exc}. Returning empty results.")
+        logger.error(f"[search_patents] Serper.dev API error: {exc}. Returning empty results.")
 
     return results

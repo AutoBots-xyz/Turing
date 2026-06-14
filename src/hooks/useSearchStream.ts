@@ -43,7 +43,7 @@ export function useSearchStream(runId: string) {
             if (!cancelled) setIsConnected(false);
           }
         } catch (err) {
-          console.error('Failed to parse Layer 3 search stream chunk:', err);
+          setError(err instanceof Error ? err : new Error('Failed to parse Layer 3 search stream chunk'));
         }
       };
 

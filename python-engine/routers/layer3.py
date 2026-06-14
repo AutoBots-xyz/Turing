@@ -12,6 +12,9 @@ from schemas.layer3 import (
     Step14Request, Step14Response, StructuralQuery, MergedResult
 )
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 from typing import List
 from services.layer3.search_papers import search_papers
 from services.layer3.search_wikipedia import search_wikipedia
@@ -36,10 +39,10 @@ async def _timed_search(coro, source_name: str) -> List:
     try:
         return await asyncio.wait_for(coro, timeout=_SOURCE_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
-        print(f"[layer3_search] {source_name} timed out after {_SOURCE_TIMEOUT_SECONDS}s.")
+        logger.warning(f"[layer3_search] {source_name} timed out after {_SOURCE_TIMEOUT_SECONDS}s.")
         return []
     except Exception as exc:
-        print(f"[layer3_search] {source_name} error: {exc}")
+        logger.error(f"[layer3_search] {source_name} error: {exc}")
         return []
 
 async def run_step_11_search(query: StructuralQuery) -> Step11Response:
@@ -57,7 +60,7 @@ async def run_step_11_search(query: StructuralQuery) -> Step11Response:
     all_results = []
     for res in results_nested:
         if isinstance(res, Exception):
-            print(f"[layer3_search] Unexpected gather error: {res}")
+            logger.error(f"[layer3_search] Unexpected gather error: {res}")
         elif isinstance(res, list):
             all_results.extend(res)
 

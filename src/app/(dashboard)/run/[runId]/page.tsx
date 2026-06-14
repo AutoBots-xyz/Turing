@@ -69,7 +69,7 @@ export default function PipelineRunPage() {
         setActiveTab('report');
         break;
     }
-  }, [runState?.currentLayer]);
+  }, [runState]);
 
   return (
     <main className="relative w-full h-screen flex flex-col overflow-hidden bg-white">

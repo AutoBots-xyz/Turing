@@ -87,8 +87,8 @@ export const AgentStatusPanel: React.FC = () => {
           </div>
         ) : (
           <>
-            <ExperimentHistoryTable entries={agents as any} />
-            <Heatmap nodes={nodes as any} lines={lines as any} />
+            <ExperimentHistoryTable entries={agents} />
+            <Heatmap nodes={nodes} lines={lines} />
           </>
         )}
       </div>

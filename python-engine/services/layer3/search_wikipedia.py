@@ -92,6 +92,6 @@ async def search_wikipedia(query: StructuralQuery) -> List[SearchResult]:
                 ))
 
     except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        print(f"[search_wikipedia] Wikipedia API error: {exc}. Returning empty results.")
+        logger.error(f"[search_wikipedia] Wikipedia API error: {exc}. Returning empty results.")
 
     return results

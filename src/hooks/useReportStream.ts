@@ -42,7 +42,7 @@ export function useReportStream(runId: string) {
             if (!cancelled) setIsConnected(false);
           }
         } catch (err) {
-          console.error('Failed to parse Layer 4 report stream chunk:', err);
+          setError(err instanceof Error ? err : new Error('Failed to parse Layer 4 report stream chunk'));
         }
       };
 

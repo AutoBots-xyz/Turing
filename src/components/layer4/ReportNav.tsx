@@ -11,7 +11,7 @@ export const ReportNav: React.FC<ReportNavProps> = ({
 }) => {
   return (
     <div className="font-mono text-xs text-gray-400 mb-10 border-b border-[#E5E5E5] pb-4 w-full uppercase tracking-widest font-bold flex justify-between items-center">
-      <span>{modelName} // {status}</span>
+      <span>{modelName}{' // '}{status}</span>
       {status !== "REPORT COMPLETE" && (
         <span className="flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-ping" />

@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { Layer2State } from '../types/layer2';
 import { apiUrl } from '@/lib/api';
 
+/** How often (ms) to poll for live Layer 2 agent swarm debate updates. */
+const POLL_INTERVAL_MS = 1000;
+
 export function useAgentLoop(runId: string) {
   const [state, setState] = useState<Layer2State | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -39,7 +42,7 @@ export function useAgentLoop(runId: string) {
 
     // Establish a 1-second interval loop to poll the FastAPI backend
     // for live updates to the Adversarial Swarm debate tree
-    intervalId = setInterval(fetchAgentState, 1000);
+    intervalId = setInterval(fetchAgentState, POLL_INTERVAL_MS);
 
     // Cleanup interval and prevent state updates on unmounted components
     return () => {

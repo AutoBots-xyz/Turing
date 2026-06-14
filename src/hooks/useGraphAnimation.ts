@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { CausalGraph } from '../types/graph';
 import { apiUrl } from '@/lib/api';
 
+/** How often (ms) to poll for live causal graph topology updates. */
+const POLL_INTERVAL_MS = 2000;
+
 export function useGraphAnimation(runId: string) {
   const [graph, setGraph] = useState<CausalGraph | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -39,7 +42,7 @@ export function useGraphAnimation(runId: string) {
 
     // Poll every 2 seconds to capture any real-time topological updates
     // as the causal discovery engine fits structural equations
-    intervalId = setInterval(fetchGraph, 2000);
+    intervalId = setInterval(fetchGraph, POLL_INTERVAL_MS);
 
     return () => {
       isMounted = false;

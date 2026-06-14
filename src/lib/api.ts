@@ -9,6 +9,9 @@
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
+/** Abort timeout (ms) for lightweight health / info fetch calls. */
+export const FETCH_TIMEOUT_MS = 3000;
+
 /** Convenience helper: join base URL with a path segment. */
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
@@ -107,7 +110,7 @@ export interface EngineInfo {
 export async function fetchHealth(): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     const res = await fetch(apiUrl("/health"), {
       cache: "no-store",
       signal: controller.signal,
@@ -127,7 +130,7 @@ export async function fetchHealth(): Promise<boolean> {
 export async function fetchEngineInfo(): Promise<EngineInfo | null> {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     const res = await fetch(apiUrl("/"), {
       cache: "no-store",
       signal: controller.signal,

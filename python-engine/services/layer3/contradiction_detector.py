@@ -1,4 +1,7 @@
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 from typing import List
 import json
 import os
@@ -176,7 +179,7 @@ async def detect_contradictions(merged_results: List[MergedResult]) -> List[Merg
         if idx in debate_map:
             debate_result = debate_map[idx]
             if isinstance(debate_result, Exception):
-                print(f"[contradiction_detector] Debate error for '{merged.title}': {debate_result}")
+                logger.error(f"[contradiction_detector] Debate error for '{merged.title}': {debate_result}")
                 processed_results.append(merged)
             elif debate_result is not None:
                 updated = merged.model_copy(update={"contradiction_analysis": debate_result})

@@ -1,4 +1,7 @@
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 import asyncio
 import httpx
 from typing import List
@@ -39,7 +42,7 @@ async def search_web(query: StructuralQuery) -> List[SearchResult]:
     results: List[SearchResult] = []
 
     if not api_key:
-        print("[search_web] SERPER_API_KEY not set. Returning empty results.")
+        logger.warning("[search_web] SERPER_API_KEY not set. Returning empty results.")
         return results
 
     headers = {
@@ -83,6 +86,6 @@ async def search_web(query: StructuralQuery) -> List[SearchResult]:
                 ))
 
     except (httpx.RequestError, httpx.HTTPStatusError) as exc:
-        print(f"[search_web] Serper.dev API error: {exc}. Returning empty results.")
+        logger.error(f"[search_web] Serper.dev API error: {exc}. Returning empty results.")
 
     return results
