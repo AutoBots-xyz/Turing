@@ -24,8 +24,8 @@ def _get_llm_client():
     """Returns LiteLLM if ANTHROPIC_API_KEY is set, else None."""
     try:
         import litellm
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            raise EnvironmentError("No key")
+        if not any(os.getenv(k) for k in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY"]):
+            raise EnvironmentError("No LLM API KEY set")
         return litellm
     except (ImportError, EnvironmentError):
         return None
@@ -61,10 +61,10 @@ async def build_ontology_from_text(content: dict) -> CausalGraph:
     client = _get_llm_client()
     if not client:
         # ERR-B37 fix: Remove naive heuristic Regex fallback.
-        raise EnvironmentError("ANTHROPIC_API_KEY is required to build causal graphs from text.")
+        raise EnvironmentError("API Key is required to build causal graphs from text.")
 
     response = client.completion(
-        model="claude-3-5-sonnet-20241022",
+        model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
         messages=[{"role": "user", "content": prompt}],
         max_tokens=1000,
     )
@@ -124,16 +124,16 @@ class LLMGraphBuilder:
             
             # Add Nodes
             if not nx_graph.has_node(source):
-                nx_graph.add_node(source, id=source, label=source, type="entity")
+                nx_graph.add_node(source, id=source, label=source, confidence=100.0)
             if not nx_graph.has_node(target):
-                nx_graph.add_node(target, id=target, label=target, type="entity")
+                nx_graph.add_node(target, id=target, label=target, confidence=100.0)
                 
             # Add Edge
             nx_graph.add_edge(
                 source, 
                 target, 
-                type=relation,
-                confidence=weight,
+                relation=relation,
+                confidence=weight * 100.0,
                 weight=weight if relation != "INHIBITS" else -weight
             )
 
@@ -163,7 +163,8 @@ class LLMGraphBuilder:
             response = completion(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"} if "gpt" in model_name or "claude" in model_name else None,
+                api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or None
             )
             content = response.choices[0].message.content
             return json.loads(content)
@@ -212,6 +213,7 @@ class LLMGraphBuilder:
                 response = completion(
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
+                    api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or None
                 )
                 content = response.choices[0].message.content.strip()
                 

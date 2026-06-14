@@ -136,7 +136,15 @@ class UniversalExtractor:
         
         try:
             if ext in ['csv']:
-                df = pd.read_csv(io.BytesIO(file_bytes))
+                # low_memory=False forces pandas to read the ENTIRE file before
+                # deciding column dtypes. Without this, large CSVs are read in
+                # chunks and mixed-type columns (floats + some strings) end up as
+                # 'object' dtype, causing the "No numeric columns found" error.
+                df = pd.read_csv(
+                    io.BytesIO(file_bytes),
+                    low_memory=False,
+                    encoding_errors='replace',  # handle non-UTF-8 characters gracefully
+                )
             elif ext in ['xlsx', 'xls']:
                 df = pd.read_excel(io.BytesIO(file_bytes))
             elif ext in ['json']:
@@ -144,8 +152,6 @@ class UniversalExtractor:
             elif ext in ['pdf']:
                 df = UniversalExtractor._extract_tables_from_pdf(file_bytes)
             else:
-                # ERR-B10 fix: raise immediately for unsupported extensions rather
-                # than blindly trying pd.read_csv() and confusing the error trail.
                 raise ValueError(
                     f"Unsupported file extension '.{ext}'. "
                     "Supported data formats: csv, xlsx, xls, json, pdf."
@@ -209,9 +215,15 @@ class UniversalExtractor:
         # Treat first row as header
         df = pd.DataFrame(combined_data[1:], columns=combined_data[0])
         
-        # Coerce columns to numeric where possible
+        # Coerce columns to numeric where possible.
+        # errors='coerce' converts invalid values to NaN rather than ignoring the
+        # whole column — this correctly handles mixed columns (numbers + some strings).
         for col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='ignore')
+            converted = pd.to_numeric(df[col], errors='coerce')
+            # Only apply conversion if at least 50% of values are numeric
+            # (avoids turning a true text column into a NaN-filled numeric column)
+            if converted.notna().mean() >= 0.5:
+                df[col] = converted
             
         return df
 
@@ -233,13 +245,26 @@ class UniversalExtractor:
         if dropped > 0:
             warnings.append(f"Dropped {dropped} rows containing missing values (NaN) to maintain mathematical integrity.")
 
-        # 2. Keep only numeric columns
+        # 2. For any object-dtype columns, try to coerce to numeric.
+        # This handles files where numbers were read as strings due to mixed data.
+        for col in df.select_dtypes(include=['object']).columns:
+            converted = pd.to_numeric(df[col], errors='coerce')
+            if converted.notna().mean() >= 0.5:  # >50% numeric values → treat as numeric
+                df[col] = converted
+
+        # 3. Drop rows where all numeric columns are NaN after coercion
+        df = df.dropna(how='all')
+
+        # 4. Keep only numeric columns
         numeric_df = df.select_dtypes(include=['number'])
         if numeric_df.empty:
-            raise ValueError("No numeric columns found after processing. Mathematical simulation impossible.")
+            raise ValueError(
+                "No numeric columns found after processing. "
+                "The file appears to contain only text data. "
+                "Please upload a CSV where at least some columns contain numbers."
+            )
 
-        # 3. Check for low data warning
-        # ERR-B11 fix: threshold is configurable via MIN_DATA_ROWS env var
+        # 5. Check for low data warning
         min_rows = int(os.getenv("MIN_DATA_ROWS", "30"))
         final_len = len(numeric_df)
         if final_len < min_rows:
@@ -252,7 +277,114 @@ class UniversalExtractor:
         return numeric_df, warnings
 
 
-# NOTE: AmbiguityDetector was previously duplicated here.
-# The canonical implementation now lives in services/layer1/ambiguity.py.
-# Import from there if you need AmbiguityDetector in this module:
-# from services.layer1.ambiguity import AmbiguityDetector
+# Penalty weights (all additive, capped at 100)
+_PENALTY_LOW_EDGE_CONF = 20       # any adjacent edge has confidence < 0.60
+_PENALTY_HIDDEN_NODE = 30         # node is inferred / hidden
+_PENALTY_CONTRADICTED_EDGE = 25   # node has at least one contradicted edge
+_PENALTY_BAD_FIT = 15             # GP fit failed or is missing for DATA path
+_PENALTY_LOW_DEGREE = 10          # node has only 1 connection total
+
+
+class AmbiguityDetector:
+    """
+    Step 7 of the Layer 1 pipeline.
+    Adds ambiguity/urgency scores to each node and an overall confidence score
+    to the graph dict so that ConfidenceChecker (Step 8) can make routing
+    decisions without re-traversing the topology.
+    """
+
+    @staticmethod
+    def analyze_graph(graph_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Annotates every node in ``graph_data`` with an ``ambiguity_score``
+        and ``urgency_score`` (0–100, higher = more uncertain), then writes:
+
+        - graph_data["overall_graph_confidence"] — mean node confidence
+        - graph_data["urgent_nodes"]             — list of nodes below 85 % conf
+        """
+        nodes: List[Dict] = graph_data.get("nodes", [])
+        edges: List[Dict] = graph_data.get("edges", [])
+
+        if not nodes:
+            logger.info("AmbiguityDetector: no nodes to score — skipping.")
+            graph_data["overall_graph_confidence"] = 100.0
+            graph_data["urgent_nodes"] = []
+            return graph_data
+
+        logger.info(f"AmbiguityDetector: scoring {len(nodes)} nodes …")
+
+        # ── Pre-compute edge lookup maps ──────────────────────────────────────
+        # adjacent_edges[node_id] = list of edge dicts touching that node
+        adjacent_edges: Dict[str, List[Dict]] = {n["id"]: [] for n in nodes}
+        for edge in edges:
+            src = edge.get("source")
+            tgt = edge.get("target")
+            if src in adjacent_edges:
+                adjacent_edges[src].append(edge)
+            if tgt and tgt in adjacent_edges:
+                adjacent_edges[tgt].append(edge)
+
+        # ── Score each node ───────────────────────────────────────────────────
+        urgent_nodes: List[Dict] = []
+
+        for node in nodes:
+            node_id = node["id"]
+            penalty = 0.0
+
+            adj = adjacent_edges.get(node_id, [])
+
+            # 1. Low edge confidence
+            if any(e.get("confidence", 1.0) < 0.60 for e in adj):
+                penalty += _PENALTY_LOW_EDGE_CONF
+
+            # 2. Hidden / inferred node
+            if node.get("is_hidden", False):
+                penalty += _PENALTY_HIDDEN_NODE
+
+            # 3. Contradicted edges touching this node
+            if any(e.get("is_contradicted", False) for e in adj):
+                penalty += _PENALTY_CONTRADICTED_EDGE
+
+            # 4. Bad or missing GP fit (DATA path)
+            fit = node.get("fit_metrics", {})
+            if fit:
+                fit_status = fit.get("status", "")
+                if fit_status not in ("FITTED", "SOURCE"):
+                    penalty += _PENALTY_BAD_FIT
+
+            # 5. Structural isolation (degree == 1)
+            if len(adj) == 1:
+                penalty += _PENALTY_LOW_DEGREE
+
+            ambiguity = min(penalty, 100.0)
+            confidence = round(100.0 - ambiguity, 2)
+
+            node["ambiguity_score"] = round(ambiguity, 2)
+            node["urgency_score"] = round(ambiguity, 2)  # mirrored for ConfidenceChecker
+            node["confidence"] = confidence
+
+            logger.debug(
+                f"  {node_id}: ambiguity={ambiguity:.1f}  confidence={confidence:.1f}"
+            )
+
+            if confidence < 85.0:
+                urgent_nodes.append({
+                    "node_id": node_id,
+                    "urgency_score": ambiguity,
+                    "confidence": confidence,
+                })
+
+        # ── Graph-level confidence ────────────────────────────────────────────
+        all_conf = [n.get("confidence", 100.0) for n in nodes]
+        overall = round(sum(all_conf) / len(all_conf), 2)
+
+        graph_data["overall_graph_confidence"] = overall
+        graph_data["urgent_nodes"] = sorted(
+            urgent_nodes, key=lambda x: x["urgency_score"], reverse=True
+        )
+
+        logger.info(
+            f"AmbiguityDetector complete: overall_confidence={overall:.1f}%, "
+            f"urgent_nodes={len(urgent_nodes)}"
+        )
+        return graph_data

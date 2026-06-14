@@ -90,10 +90,12 @@ class NodeClassifier:
             """
             
             try:
+                import os
                 response = completion(
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_object"} if "gpt" in model_name else None
+                    response_format={"type": "json_object"} if "gpt" in model_name or "claude" in model_name else None,
+                    api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or None
                 )
                 content = response.choices[0].message.content.strip()
                 import re
@@ -128,21 +130,22 @@ class NodeClassifier:
                                     "border_style": "dotted",
                                     "node_class": "HIDDEN",
                                     "theme": "gray",
-                                    "semantic_label": "Inferred missing node"
+                                    "semantic_label": "Inferred missing node",
+                                    "confidence": 50.0
                                 })
                             # Create inferred edges
                             edges.append({
                                 "source": u,
                                 "target": hidden_node_id,
-                                "type": "INFERRED",
-                                "confidence": 0.5,
+                                "relation": "INFERRED",
+                                "confidence": 50.0,
                                 "weight": 0.5
                             })
                             edges.append({
                                 "source": hidden_node_id,
                                 "target": v,
-                                "type": "INFERRED",
-                                "confidence": 0.5,
+                                "relation": "INFERRED",
+                                "confidence": 50.0,
                                 "weight": 0.5
                             })
                             logger.info(f"AGENT ADDED HIDDEN NODE: {hidden_node_id} between {u} and {v}")

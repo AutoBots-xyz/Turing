@@ -92,47 +92,78 @@ class PCGraphBuilder:
 
         logger.info(f"Running PC Algorithm on {len(df)} rows, {len(columns)} columns with alpha={alpha}")
 
-        # Run PC Algorithm
-        # default fisherz test for continuous data
+        # Run PC Algorithm — use Fisher Z test for continuous numeric data
         if 'pc' not in globals():
             raise ImportError("causal-learn is not installed.")
-            
+
         cg = pc(data_matrix, alpha, indep_test='fisherz', show_progress=False)
 
         # Convert causal-learn graph to NetworkX
         nx_graph = nx.DiGraph()
 
-        # Add nodes
+        # Add all nodes first
         for i, col in enumerate(columns):
-            nx_graph.add_node(col, id=col, label=col, type="variable")
+            nx_graph.add_node(col, id=col, label=col, type="variable", confidence=100.0)
 
         adj_matrix = cg.G.graph
         num_nodes = len(columns)
+        directed_edge_count = 0
 
         for i in range(num_nodes):
             for j in range(num_nodes):
                 if i == j:
                     continue
-                
+
                 # Check for directed edge i -> j
                 if adj_matrix[i, j] == -1 and adj_matrix[j, i] == 1:
                     # Calculate correlation for the visual edge weight
                     correlation = float(np.corrcoef(data_matrix[:, i], data_matrix[:, j])[0, 1])
-                    
+
                     # Extract actual conditional independence test p-value
                     try:
                         p_value = float(cg.ci_test(i, j, set()))
                         confidence = max(0.0, 1.0 - p_value)
                     except Exception:
-                        confidence = abs(correlation) # Fallback if ci_test fails
-                    
+                        confidence = abs(correlation)  # Fallback if ci_test fails
+
                     nx_graph.add_edge(
-                        columns[i], 
-                        columns[j], 
+                        columns[i],
+                        columns[j],
                         weight=correlation,
-                        confidence=confidence,
-                        type="CAUSES" # Default mathematical relation
+                        confidence=confidence * 100.0,
+                        relation="CAUSES"
                     )
+                    directed_edge_count += 1
+
+        # ---------------------------------------------------------------
+        # FALLBACK: If PC found no directed edges (common with small or
+        # high-dimensional datasets), fall back to correlation-based edges.
+        # We use absolute Pearson |r| > 0.3 as the threshold, which
+        # represents a moderate-to-strong relationship worth visualizing.
+        # ---------------------------------------------------------------
+        if directed_edge_count == 0:
+            logger.warning(
+                "PC Algorithm found no directed edges. "
+                "Falling back to Pearson correlation graph (|r| > 0.3)."
+            )
+            corr_matrix = np.corrcoef(data_matrix, rowvar=False)
+            for i in range(num_nodes):
+                for j in range(num_nodes):
+                    if i == j:
+                        continue
+                    r = corr_matrix[i, j]
+                    if abs(r) > 0.3:
+                        # Use positive correlation as weight, direction = high->low index
+                        # (a reasonable structural heuristic when causality is unknown)
+                        src, tgt = (i, j) if r > 0 else (j, i)
+                        if not nx_graph.has_edge(columns[src], columns[tgt]):
+                            nx_graph.add_edge(
+                                columns[src],
+                                columns[tgt],
+                                weight=round(float(r), 4),
+                                confidence=round(abs(r) * 100.0, 2),
+                                relation="CORRELATES"
+                            )
 
         # Serialize to JSON format expected by UI
         return PCGraphBuilder._serialize_nx(nx_graph)

@@ -221,7 +221,7 @@ class GraphValidator:
 
             If an edge is backwards, list it so we can flip it.
             Respond ONLY with a valid JSON array of objects representing the edges that must be flipped.
-            Schema: [{{"source": "OutcomeNode", "target": "InputNode", "reason": "brief causal violation explanation"}}]
+            Schema: [{{"source": "VariableA", "target": "VariableB", "reason": "Outcome cannot cause input"}}]
             If all edges are causally plausible, return an empty array [].
             """
             
@@ -229,7 +229,8 @@ class GraphValidator:
                 response = completion(
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_object"} if "gpt" in model_name else None
+                    response_format={"type": "json_object"} if "gpt" in model_name or "claude" in model_name else None,
+                    api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or None
                 )
                 content = response.choices[0].message.content.strip()
                 
@@ -276,6 +277,11 @@ class GraphValidator:
     @staticmethod
     def _remove_disconnected(graph: nx.MultiDiGraph) -> tuple[nx.MultiDiGraph, list]:
         logs = []
+        # Only remove isolated nodes if the graph has edges — otherwise a valid
+        # graph built from data with no PC-detected directed edges would be wiped.
+        if graph.number_of_edges() == 0:
+            logs.append("INFO: Graph has no directed edges — keeping all nodes to preserve the causal structure.")
+            return graph, logs
         isolated = list(nx.isolates(graph))
         for node in isolated:
             graph.remove_node(node)
@@ -288,140 +294,6 @@ class GraphValidator:
         edges = [{"source": u, "target": v, **d} for u, v, k, d in graph.edges(data=True, keys=True)]
         return {"nodes": nodes, "edges": edges}
 
-
-# ─── StructuralFitter (Step 5) ────────────────────────────────────────────────
-
-MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "storage", "models")
-os.makedirs(MODELS_DIR, exist_ok=True)
-
-class StructuralFitter:
-    """
-    Step 5: Fits Gaussian Process equations to causal graphs.
-    Only processes DATA path graphs. Skips TEXT path.
-    """
-
-    @staticmethod
-    def fit_graph(df: pd.DataFrame, graph_data: dict, path_type: str) -> dict:
-        """
-        Fits a GP for every target node based on its causal parents.
-        Saves the models to disk and returns augmented graph data.
-        """
-        if path_type == "TEXT":
-            logger.info("Skipping Structural Equation Fitter for TEXT path.")
-            graph_data["is_fitted"] = False
-            return graph_data
-
-        if df.empty:
-            raise ValueError("Cannot fit graph with empty DataFrame.")
-
-        logger.info(f"Fitting Structural Equations for DATA path graph with {len(df)} rows...")
-
-        session_id = str(uuid.uuid4())
-        models = {}
-
-        nodes = graph_data.get("nodes", [])
-        edges = graph_data.get("edges", [])
-
-        parents_map = {n["id"]: [] for n in nodes}
-        for e in edges:
-            target = e["target"]
-            source = e["source"]
-            if target in parents_map:
-                parents_map[target].append(source)
-
-        global_warnings = []
-
-        for node in nodes:
-            node_id = node["id"]
-            parents = parents_map.get(node_id, [])
-
-            if not parents:
-                node["fit_metrics"] = {"r2": None, "mean_uncertainty": None, "status": "SOURCE"}
-                continue
-
-            valid_parents = [p for p in parents if p in df.columns]
-            if not valid_parents or node_id not in df.columns:
-                node["fit_metrics"] = {"r2": None, "mean_uncertainty": None, "status": "MISSING_DATA"}
-                continue
-
-            X = df[valid_parents].values
-            y = df[node_id].values
-
-            # ERR-B07 fix: initialise kernel from data statistics so the
-            # optimizer starts in a sensible region for this specific variable
-            # pair rather than always using 1.0 regardless of scale.
-            x_std = float(np.std(X)) if X.size else 1.0
-            y_std = float(np.std(y)) if y.size else 1.0
-            init_length_scale = max(x_std, 1e-3)   # avoid degenerate 0-scale
-            init_noise_level  = max(y_std * 0.1, 1e-4)
-
-            kernel = (
-                1.0 * RBF(length_scale=init_length_scale)
-                + WhiteKernel(noise_level=init_noise_level)
-            )
-
-            # ERR-B06 fix: random_state is None in production (non-deterministic,
-            # surfaces true optimizer instability) and can be fixed via
-            # GP_RANDOM_STATE env var for reproducible local testing.
-            _rs_env = os.getenv("GP_RANDOM_STATE")
-            random_state = int(_rs_env) if _rs_env is not None else None
-
-            gp = GaussianProcessRegressor(
-                kernel=kernel,
-                n_restarts_optimizer=5,
-                normalize_y=True,
-                random_state=random_state,
-            )
-
-            try:
-                gp.fit(X, y)
-                models[node_id] = {"model": gp, "parents": valid_parents}
-
-                r2 = gp.score(X, y)
-                y_pred, std = gp.predict(X, return_std=True)
-                mean_uncertainty = float(np.mean(std))
-
-                example_parent_vals = [f"{p}={X[0][i]:.2f}" for i, p in enumerate(valid_parents)]
-                example_str = f"{', '.join(example_parent_vals)} → {node_id}={y_pred[0]:.2f} ± {std[0]:.2f}"
-
-                sparse_warning = False
-                y_std = float(np.std(y))
-                if y_std > 0 and (mean_uncertainty / y_std) > 0.2:
-                    sparse_warning = True
-                    warning_msg = f"Sparse data detected for {node_id}. High uncertainty relative to variance in causal relationship."
-                    global_warnings.append(warning_msg)
-                    node.setdefault("warnings", []).append(warning_msg)
-
-                node["fit_metrics"] = {
-                    "r2": float(r2),
-                    "mean_uncertainty": mean_uncertainty,
-                    "status": "FITTED",
-                    "example_equation": example_str,
-                    "sparse_data_warning": sparse_warning
-                }
-                logger.debug(f"Fitted GP for {node_id} (R2: {r2:.3f}, Unc: {mean_uncertainty:.3f})")
-
-            except Exception as e:
-                logger.error(f"Failed to fit GP for node {node_id}: {e}")
-                node["fit_metrics"] = {"r2": None, "mean_uncertainty": None, "status": f"ERROR: {str(e)}"}
-
-        model_path = os.path.join(MODELS_DIR, f"{session_id}.joblib")
-        try:
-            joblib.dump(models, model_path)
-            logger.info(f"Successfully saved {len(models)} models to {model_path}")
-        except Exception as e:
-            logger.error(f"Failed to save models to disk: {e}")
-            raise RuntimeError(f"Model serialization failed: {e}")
-
-        graph_data["is_fitted"] = True
-        graph_data["session_id"] = session_id
-        if global_warnings:
-            graph_data.setdefault("global_warnings", []).extend(global_warnings)
-
-        return graph_data
-
-
-# ─── ConfidenceChecker (Step 8) ───────────────────────────────────────────────
 
 class ConfidenceChecker:
     """
