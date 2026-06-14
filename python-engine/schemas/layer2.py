@@ -1,13 +1,40 @@
+"""
+schemas/layer2.py
+
+Data models for Layer 2 Agent Simulation and Bayesian Optimization.
+Combines granular step-by-step models (Sub_Manas) with orchestration models (main).
+"""
 from enum import Enum
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field, model_validator
 from .graph import CausalGraph
 
+# ==============================================================================
+# 0. SHARED & ENUM MODELS
+# ==============================================================================
 
 class InputType(str, Enum):
+    DATA = "data"
     CSV = "csv"
     TEXT = "text"
 
+class PipelineMode(str, Enum):
+    SIMULATION = "SIMULATION_MODE"
+    LITERATURE = "LITERATURE_MODE"
+
+class ModeDetectorInput(BaseModel):
+    graph_data: Dict[str, Any] = Field(description="The causal graph topology from Layer 1")
+    unknown_nodes: List[Dict[str, Any]] = Field(default_factory=list, description="List of unknown nodes with rankings")
+    input_type: InputType = Field(description="Type of input data processed in Layer 1 (data or text)")
+
+class ModeDetectorOutput(BaseModel):
+    mode: PipelineMode = Field(description="The detected pipeline mode based on input type")
+    message: str = Field(description="Explanation of the routing decision")
+
+
+# ==============================================================================
+# 1. ORCHESTRATION MODELS (main)
+# ==============================================================================
 
 class AgentAction(BaseModel):
     agent_id: str
@@ -17,24 +44,22 @@ class AgentAction(BaseModel):
     act: str = Field(..., description="ReAct ACT step — the executed action and result")
     expected_improvement: float = Field(..., description="Bayesian Expected Improvement score")
 
-
-class SimulationResult(BaseModel):
+class IterationResult(BaseModel):
+    """(Formerly SimulationResult in main branch) Result of one full orchestration iteration."""
     iteration: int
     agent_actions: List[AgentAction]
     best_intervention: str
     predicted_outcome: float = Field(..., description="Predicted value after intervention")
     confidence: float = Field(..., ge=0.0, le=100.0)
 
-
 class Layer2Request(BaseModel):
     graph: CausalGraph
     target_node_id: str = Field(..., description="The node we are trying to optimise")
     max_iterations: int = Field(default=10, description="Maximum Bayesian optimisation rounds")
 
-
 class Layer2Response(BaseModel):
     final_graph: CausalGraph
-    simulation_results: List[SimulationResult]
+    simulation_results: List[IterationResult]
     best_intervention: str
     confidence: float
 

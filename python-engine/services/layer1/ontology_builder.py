@@ -1,16 +1,24 @@
 """
-services/layer1/ontology_builder.py — Text Path Ontology Builder
+services/layer1/ontology_builder.py
 
-Fixes Error 5 (Batch 4): This file was completely empty.
-Calls Claude (via LiteLLM) to extract an initial causal graph from a
-document text. This is the Text Path equivalent of the PC Algorithm.
-Falls back to a keyword-based heuristic when no API key is available.
+Implements Text Path Causal Graph Extraction.
+Combines simple one-shot extraction (Mayank) and Dual-Stage extraction (Harsh).
 """
+
 import json
 import os
+import re
+import logging
+import networkx as nx
+from litellm import completion
 
 from schemas.graph import CausalGraph, Node, Edge
 
+logger = logging.getLogger(__name__)
+
+# ==============================================================================
+# 1. SIMPLE ONE-SHOT EXTRACTION (Mayank)
+# ==============================================================================
 
 def _get_llm_client():
     """Returns LiteLLM if ANTHROPIC_API_KEY is set, else None."""
@@ -22,26 +30,9 @@ def _get_llm_client():
     except (ImportError, EnvironmentError):
         return None
 
-
 async def build_ontology_from_text(content: dict) -> CausalGraph:
     """
     Text Path: Extracts a causal graph from document text using Claude.
-
-    The LLM identifies:
-    - Nodes: nouns representing entities, variables, or components
-    - Edges: directed causal verbs (CAUSES, INHIBITS, ACTIVATES, REQUIRES, etc.)
-    - Confidence: scored from 0-100 based on linguistic certainty
-
-    Parameters
-    ----------
-    content : dict
-        Parsed text content from universal_parser._parse_text().
-        Must contain a "content" key with the full document text.
-
-    Returns
-    -------
-    CausalGraph
-        The extracted causal graph with nodes and directed edges.
     """
     text = content.get("content", "")
     if not text.strip():

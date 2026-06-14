@@ -1,12 +1,12 @@
 """
-services/layer1/gaussian_process.py — Gaussian Process Confidence Estimator
+services/layer1/gaussian_process.py — Gaussian Process Tools
 
-Fixes Error 5 (Batch 4): This file was completely empty.
-Refines node confidence scores using a Gaussian Process (GP) regression model
-fitted on the extracted causal graph structure, improving the raw confidence
-values produced by the PC Algorithm or Ontology Builder.
+Combines the Gaussian Process confidence estimator (main) for Layer 1
+with the GPEngine mathematical predictor (Sub_Manas) for Layer 2 simulation.
 """
-from typing import List
+import math
+import warnings
+from typing import List, Dict, Optional
 
 from schemas.graph import CausalGraph, Node
 

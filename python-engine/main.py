@@ -1,9 +1,8 @@
 """
-main.py — Causal Nexus API Entry Point
+main.py — Turing API Entry Point
 
-Fixes Error 1 (Batch 4): This file was completely empty.
-Now initialises the FastAPI application, registers all routers,
-configures CORS middleware and starts the Uvicorn server.
+Initialises the FastAPI application, registers all routers,
+configures CORS middleware, database, and starts the Uvicorn server.
 """
 import os
 from contextlib import asynccontextmanager
@@ -27,24 +26,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Causal Nexus API",
-    description=(
-        "A cross-domain causal reasoning engine that discovers structural analogues "
-        "across scientific literature, patents, and the web to resolve bottleneck nodes."
-    ),
-    version="0.1.0",
+    title="Turing - Causal Nexus API",
+    description="Causal Graph Discovery Engine Backend",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
 # ---------------------------------------------------------------------------
-# CORS — allow the Next.js frontend (local dev on port 3000)
+# CORS — allow the Next.js frontend
 # ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,11 +55,11 @@ app.include_router(runs.router,   prefix="/api/runs",   tags=["Runs — Session 
 
 @app.get("/", tags=["Health"])
 async def root():
-    return {"status": "ok", "service": "Causal Nexus API", "version": "0.1.0"}
+    return {"status": "ok", "service": "turing-python-engine", "version": "1.0.0"}
 
 
 @app.get("/health", tags=["Health"])
-async def health():
+async def health_check():
     return {"status": "healthy"}
 
 
