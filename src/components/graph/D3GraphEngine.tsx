@@ -21,7 +21,8 @@ interface SimulationLink extends d3.SimulationLinkDatum<SimulationNode> {
   curvature: number;
   crossDomain?: boolean;
   weight: number;
-  label: string;
+  label?: string;
+  relation?: string;
 }
 
 export type PipelineStep = 'idle' | 'simulated' | 'bottleneck' | 'crossdomain';
@@ -59,7 +60,7 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
   const simRef = useRef<d3.Simulation<SimulationNode, SimulationLink> | null>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; node: SimulationNode } | null>(null);
+  const [tooltipNode, setTooltipNode] = useState<SimulationNode | null>(null);
 
   // 1. Rebuild the entire graph topology when the 'graph' data prop changes
   const buildGraph = useCallback(() => {
@@ -148,7 +149,18 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
       .data(links).enter().append('rect')
       .attr('fill', 'rgba(255,255,255,0.95)')
       .attr('rx', 0).attr('ry', 0)
-      .attr('cursor', 'pointer');
+      .attr('cursor', 'pointer')
+      .on('click', (event, d) => {
+        linkEl.attr('stroke', l => (l === d ? '#3498db' : (l.crossDomain ? '#7B2D8E' : '#C0C0C0')))
+          .attr('stroke-width', l => (l === d ? 3 : 1.5));
+        
+        edgeLabelBg.attr('stroke', l => (l === d ? '#3498db' : 'none')).attr('stroke-width', 1);
+        edgeLabelText.attr('fill', l => (l === d ? '#3498db' : '#666')).attr('font-weight', l => (l === d ? 800 : 600));
+        
+        if (d.crossDomain) {
+          document.dispatchEvent(new CustomEvent('OPEN_INSIGHT', { detail: d }));
+        }
+      });
 
     const edgeLabelText = edgeLabelGroup.selectAll<SVGTextElement, SimulationLink>('text')
       .data(links).enter().append('text')
@@ -159,7 +171,18 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
       .attr('cursor', 'pointer')
       .attr('font-family', "'Space Grotesk', sans-serif")
       .attr('font-weight', 600)
-      .text(d => d.label);
+      .text(d => d.label || d.relation || '')
+      .on('click', (event, d) => {
+        linkEl.attr('stroke', l => (l === d ? '#3498db' : (l.crossDomain ? '#7B2D8E' : '#C0C0C0')))
+          .attr('stroke-width', l => (l === d ? 3 : 1.5));
+        
+        edgeLabelBg.attr('stroke', l => (l === d ? '#3498db' : 'none')).attr('stroke-width', 1);
+        edgeLabelText.attr('fill', l => (l === d ? '#3498db' : '#666')).attr('font-weight', l => (l === d ? 800 : 600));
+        
+        if (d.crossDomain) {
+          document.dispatchEvent(new CustomEvent('OPEN_INSIGHT', { detail: d }));
+        }
+      });
 
     // Render Nodes
     const nodeGroup = g.append('g').attr('class', 'nodes');
@@ -184,16 +207,23 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
         d3.select(event.currentTarget).select('circle')
           .attr('stroke', '#333')
           .attr('stroke-width', 3);
-        setTooltip({ x: event.clientX, y: event.clientY, node: d });
+        setTooltipNode(d);
+        if (tooltipRef.current) {
+          tooltipRef.current.style.left = `${event.clientX + 15}px`;
+          tooltipRef.current.style.top = `${event.clientY + 15}px`;
+        }
       })
       .on('mousemove', (event) => {
-        setTooltip(prev => prev ? { ...prev, x: event.clientX, y: event.clientY } : null);
+        if (tooltipRef.current) {
+          tooltipRef.current.style.left = `${event.clientX + 15}px`;
+          tooltipRef.current.style.top = `${event.clientY + 15}px`;
+        }
       })
       .on('mouseout', (event, d) => {
         d3.select(event.currentTarget).select('circle')
           .attr('stroke', '#fff')
           .attr('stroke-width', 2.5);
-        setTooltip(null);
+        setTooltipNode(null);
       })
       .on('click', (event, d) => {
         nodeEl.select('circle')
@@ -247,8 +277,8 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
         const mx = ((s.x ?? 0) + (t.x ?? 0)) / 2;
         const my = ((s.y ?? 0) + (t.y ?? 0)) / 2;
         d3.select(this)
-          .attr('x', mx - 20).attr('y', my - 8)
-          .attr('width', 40).attr('height', 16);
+          .attr('x', mx - 30).attr('y', my - 8)
+          .attr('width', 60).attr('height', 16);
       });
       
       edgeLabelText
@@ -291,6 +321,7 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
       // Highlight bottlenecks and cross-domain links
       d3.selectAll<SVGGElement, SimulationNode>('g.node-bottleneck').classed('pulsing', true);
       links
+        .classed('animated', true)
         .attr('stroke', function() {
           const src = d3.select(this).attr('data-source');
           const tgt = d3.select(this).attr('data-target');
@@ -346,7 +377,6 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
         .link.animated {
           stroke-dasharray: 4, 4;
           animation: flow 0.8s linear infinite;
-          stroke: #3498db !important;
         }
         @keyframes flow { to { stroke-dashoffset: -8; } }
 
@@ -368,13 +398,11 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
       />
 
       {/* Dynamic Hover Tooltip */}
-      {tooltip && (
+      {tooltipNode && (
         <div
           ref={tooltipRef}
           className="absolute bg-white border border-[#E5E5E5] p-4 pointer-events-none z-20 text-[12px] text-black shadow-[4px_4px_0px_rgba(0,0,0,0.05)] min-w-[220px]"
           style={{
-            left: tooltip.x + 15,
-            top:  tooltip.y + 15,
             opacity: 1,
             transition: 'opacity 0.15s ease',
             position: 'fixed',
@@ -382,21 +410,21 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
         >
           <h3
             className="text-[14px] font-bold mb-2.5 pb-2 font-sans"
-            style={{ borderBottom: `2px solid ${COLOR_MAP[tooltip.node.type] || '#999'}` }}
+            style={{ borderBottom: `2px solid ${COLOR_MAP[tooltipNode.type] || '#999'}` }}
           >
-            {tooltip.node.label}
+            {tooltipNode.label}
           </h3>
           <div className="flex justify-between my-1.5 leading-relaxed">
             <span className="text-[#666666] font-semibold">Value</span>
-            <span className="text-black font-mono">{(tooltip.node.value || 0).toFixed(2)}</span>
+            <span className="text-black font-mono">{(tooltipNode.value || 0).toFixed(2)}</span>
           </div>
           <div className="flex justify-between my-1.5 leading-relaxed">
             <span className="text-[#666666] font-semibold">β Coefficient</span>
-            <span className="text-black font-mono">{(tooltip.node.beta || 0).toFixed(3)}</span>
+            <span className="text-black font-mono">{(tooltipNode.beta || 0).toFixed(3)}</span>
           </div>
           <div className="flex justify-between my-1.5 leading-relaxed">
             <span className="text-[#666666] font-semibold">Type</span>
-            <span className="text-black font-mono uppercase">{tooltip.node.type || 'unknown'}</span>
+            <span className="text-black font-mono uppercase">{tooltipNode.type || 'unknown'}</span>
           </div>
         </div>
       )}

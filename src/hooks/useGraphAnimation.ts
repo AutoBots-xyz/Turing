@@ -25,7 +25,14 @@ export function useGraphAnimation(runId: string) {
         const data: CausalGraph = await response.json();
         
         if (isMounted) {
-          setGraph(data);
+          setGraph(prev => {
+            if (!prev) return data;
+            // Only update if the graph actually changed, to prevent D3 from resetting the physics layout
+            if (JSON.stringify(prev) === JSON.stringify(data)) {
+              return prev;
+            }
+            return data;
+          });
           setError(null);
           setIsLoading(false);
         }

@@ -16,7 +16,8 @@ export interface CausalEdge {
   target: string;
   curvature: number;
   weight: number;
-  label: string;
+  label?: string;
+  relation?: string;
   crossDomain?: boolean;
 }
 

@@ -17,7 +17,7 @@ export const GraphPane: React.FC = () => {
   const params = useParams();
   const rawId = params?.runId;
   const runId = Array.isArray(rawId) ? rawId[0] : rawId || '';
-  
+
   const { runState } = useRunState(runId);
   const { graph } = useGraphAnimation(runId);
   const { state: layer3State } = useSearchStream(runId);
@@ -56,8 +56,8 @@ export const GraphPane: React.FC = () => {
         headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) throw new Error(`Layer 1 API failed: ${res.statusText}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error triggering Layer 1 Causal Discovery");
+    } catch (err: any) {
+      setError(err.message || "Network error triggering Layer 1 Causal Discovery");
     }
   };
 
@@ -69,8 +69,8 @@ export const GraphPane: React.FC = () => {
         headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) throw new Error(`Layer 2 API failed: ${res.statusText}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error triggering Layer 2 Bottleneck Resolution");
+    } catch (err: any) {
+      setError(err.message || "Network error triggering Layer 2 Bottleneck Resolution");
     }
   };
 
@@ -82,8 +82,8 @@ export const GraphPane: React.FC = () => {
         headers: { 'Content-Type': 'application/json' }
       });
       if (!res.ok) throw new Error(`Layer 3 API failed: ${res.statusText}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error triggering Layer 3 Isomorphism Search");
+    } catch (err: any) {
+      setError(err.message || "Network error triggering Layer 3 Isomorphism Search");
     }
   };
 
@@ -145,14 +145,14 @@ export const GraphPane: React.FC = () => {
 
             {/* Step label */}
             <div className="text-center font-mono text-[10px] text-gray-400 mb-5 uppercase tracking-[0.2em]">
-              {runState.layer1Progress <= 10  ? 'Detecting File Type...'       :
-               runState.layer1Progress <= 20  ? 'Extracting Data...'           :
-               runState.layer1Progress <= 40  ? 'Running PC Algorithm...'      :
-               runState.layer1Progress <= 60  ? 'Validating With AI...'        :
-               runState.layer1Progress <= 75  ? 'Fitting Equations...'         :
-               runState.layer1Progress <= 85  ? 'Classifying Nodes...'         :
-               runState.layer1Progress <= 95  ? 'Detecting Ambiguities...'     :
-                                                'Finalizing Graph...'}
+              {runState.layer1Progress <= 10 ? 'Detecting File Type...' :
+                runState.layer1Progress <= 20 ? 'Extracting Data...' :
+                  runState.layer1Progress <= 40 ? 'Running PC Algorithm...' :
+                    runState.layer1Progress <= 60 ? 'Validating With AI...' :
+                      runState.layer1Progress <= 75 ? 'Fitting Equations...' :
+                        runState.layer1Progress <= 85 ? 'Classifying Nodes...' :
+                          runState.layer1Progress <= 95 ? 'Detecting Ambiguities...' :
+                            'Finalizing Graph...'}
             </div>
 
             {/* Progress bar */}
@@ -171,15 +171,12 @@ export const GraphPane: React.FC = () => {
           </div>
         </div>
       )}
-      
-      <D3GraphEngine 
+
+      <D3GraphEngine
         graph={graph}
         bridge={topBridge}
         step={step}
         insightVisible={insightVisible}
-        onRunDiscovery={handleRunDiscovery}
-        onIdentifyBottleneck={handleIdentifyBottleneck}
-        onSearchCrossDomain={handleSearchCrossDomain}
       />
     </div>
   );
