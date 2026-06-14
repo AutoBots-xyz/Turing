@@ -25,9 +25,11 @@ python-engine/.env
 # Virtual environment
 python-engine/venv/
 python-engine/env/
+python-engine/venv313/
 venv/
 .venv/
 env/
+venv*/
 
 # Python cache
 __pycache__/
