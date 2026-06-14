@@ -10,16 +10,15 @@ from schemas.graph import CausalGraph, Node, Edge
 def _get_llm_client():
     """
     Returns the configured LLM client via LiteLLM.
-    Falls back to a mock if the API key is not configured.
+    Falls back to a safe default if the API key is not configured.
     """
     try:
         import litellm
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise EnvironmentError("ANTHROPIC_API_KEY not set")
+        if not any(os.getenv(k) for k in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY"]):
+            raise EnvironmentError("No LLM API KEY set")
         return litellm
     except (ImportError, EnvironmentError):
-        return None  # Signals mock fallback
+        return None  # Signals safe fallback
 
 # ---------------------------------------------------------------------------
 # Function 1: generate_domain_blind_query
@@ -45,12 +44,16 @@ def generate_domain_blind_query(node: Node, graph: CausalGraph) -> str:
 
     client = _get_llm_client()
     if not client:
-        raise EnvironmentError("ANTHROPIC_API_KEY is required to generate domain-blind queries.")
+        raise EnvironmentError("API Key is required to generate domain-blind queries.")
 
+    # Set NVIDIA NIM API key for litellm if available
+    if os.getenv("NVIDIA_NIM_API_KEY"):
+        client.api_key = os.getenv("NVIDIA_NIM_API_KEY")
     response = client.completion(
-        model="claude-3-5-sonnet-20241022",
+        model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=100
+        max_tokens=100,
+        api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY")
     )
     return response.choices[0].message.content.strip()
 
@@ -85,12 +88,13 @@ async def extract_causal_graph_from_text(text: str) -> CausalGraph:
     client = _get_llm_client()
     if not client:
         # ERR-B31 fix: Do not poison the extraction step with fabricated demo data.
-        raise EnvironmentError("ANTHROPIC_API_KEY is required to extract causal graphs.")
+        raise EnvironmentError("API Key is required to extract causal graphs.")
 
     response = client.completion(
-        model="claude-3-5-sonnet-20241022",
+        model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=800
+        max_tokens=800,
+        api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY")
     )
     raw = response.choices[0].message.content.strip()
     # Strip markdown fences if present
@@ -128,13 +132,14 @@ async def evaluate_compatibility_and_transferability(
 
     client = _get_llm_client()
     if not client:
-        # ERR-B32 fix: Do not mock semantic transferability with naive word intersection.
-        raise EnvironmentError("ANTHROPIC_API_KEY is required to evaluate transferability.")
+        # ERR-B32 fix: Do not simulate semantic transferability with naive word intersection.
+        raise EnvironmentError("API Key is required to evaluate transferability.")
 
     response = client.completion(
-        model="claude-3-5-sonnet-20241022",
+        model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=60
+        max_tokens=60,
+        api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY")
     )
     raw = response.choices[0].message.content.strip()
     if raw.startswith("```"):
@@ -169,12 +174,12 @@ async def evaluate_deployment_status(url: str, snippet: str) -> str:
 
     client = _get_llm_client()
     if not client:
-        raise EnvironmentError("ANTHROPIC_API_KEY is required to evaluate deployment status.")
+        raise EnvironmentError("API Key is required to evaluate deployment status.")
 
     try:
         response = await asyncio.to_thread(
             client.completion,
-            model="claude-3-5-sonnet-20241022",
+            model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=20
         )

@@ -15,11 +15,11 @@ from services.layer4.context_packager import pack_bridges_into_context
 
 
 def _get_llm_client():
-    """Returns LiteLLM client if ANTHROPIC_API_KEY is set, else None."""
+    """Returns LiteLLM client if an LLM API KEY is set, else None."""
     try:
         import litellm
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            raise EnvironmentError("No key")
+        if not any(os.getenv(k) for k in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY"]):
+            raise EnvironmentError("No LLM API KEY set")
         return litellm
     except (ImportError, EnvironmentError):
         return None
@@ -88,18 +88,18 @@ async def build_report(run_id: str, step14_response: Step14Response) -> FinalRep
     # -----------------------------------------------------------------------
     client = _get_llm_client()
     if not client:
-        # ERR-B28 fix: Instead of a fake deterministic mad-libs report, or a hard crash (HTTP 500),
+        # ERR-B28 fix: Instead of a static deterministic mad-libs report, or a hard crash (HTTP 500),
         # fail gracefully by explicitly telling the user in the report that the AI is disabled.
         return FinalReport(
             run_id=run_id,
-            problem_statement="Report generation failed: ANTHROPIC_API_KEY is missing.",
+            problem_statement="Report generation failed: LLM API KEY is missing.",
             top_bridges=bridges,
             executive_summary=(
                 "The cross-domain bridges were successfully ranked, but the final generative "
                 "report could not be created because the Anthropic API key is not configured. "
-                "Please add ANTHROPIC_API_KEY to your environment variables."
+                "Please add ANTHROPIC_API_KEY, OPENAI_API_KEY, or NVIDIA_API_KEY to your environment variables."
             ),
-            recommended_experiment="Configure ANTHROPIC_API_KEY to view AI-recommended experiments.",
+            recommended_experiment="Configure an LLM API KEY to view AI-recommended experiments.",
             contradiction_warnings=contradiction_warnings,
             confidence_disclaimer="AI Generation Disabled.",
         )
@@ -118,9 +118,10 @@ async def build_report(run_id: str, step14_response: Step14Response) -> FinalRep
     )
 
     response = client.completion(
-        model="claude-3-5-sonnet-20241022",
+        model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
         messages=[{"role": "user", "content": prompt}],
         max_tokens=600,
+        api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or None
     )
     raw = response.choices[0].message.content.strip()
     if raw.startswith("```"):
