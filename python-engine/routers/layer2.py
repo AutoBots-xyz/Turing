@@ -9,7 +9,7 @@ import asyncio
 
 # Main / Orchestration Imports
 from schemas.layer2 import Layer2Request, Layer2Response
-from services.layer2.bayesian_optimizer import run_bayesian_optimization
+from services.layer2.orchestrator import run_bayesian_optimization
 
 # Granular Endpoint Imports (Sub_Manas)
 from schemas.layer2 import (
@@ -25,8 +25,8 @@ from services.layer2.bayesian_optimizer import BayesianOptimizer
 from services.layer2.agent_explorer import AgentExplorer
 from services.layer2.agent_exploiter import AgentExploiter
 from services.layer2.agent_contrarian import AgentContrarian
+from services.layer2.cliff_detector import CliffDetector, UnexploredZoneFinder
 from services.layer2.heatmap import HeatmapGenerator
-from services.layer2.unexplored_zone_finder import UnexploredZoneFinder
 
 # Note: prefix is handled in main.py (/api/layer2)
 router = APIRouter()
@@ -154,7 +154,7 @@ async def run_round(payload: RoundInput):
         
         # ERR-B15 fix: If the simulation didn't produce a prediction for the
         # sink node (e.g. disconnected graph or calculation error), skip it gracefully
-        # instead of fabricating fake data that poisons the Bayesian optimizer.
+        # instead of fabricating invalid data that poisons the Bayesian optimizer.
         if not pred:
             continue
             

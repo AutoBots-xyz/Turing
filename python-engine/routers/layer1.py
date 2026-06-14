@@ -19,14 +19,12 @@ from schemas.run import RunStatus
 
 # Layer 1 Detection & Pipeline Imports
 from services.layer1.file_detector import detect_input_type, validate_file_exists, InputType, UniversalFileDetector
-from services.layer1.extractor import UniversalExtractor
+from services.layer1.extractor import UniversalExtractor, AmbiguityDetector
 from services.layer1.pc_algorithm import PCGraphBuilder
 from services.layer1.ontology_builder import LLMGraphBuilder
-from services.layer1.validator import GraphValidator
-from services.layer1.fitter import StructuralFitter
+from services.layer1.validator import GraphValidator, ConfidenceChecker
+from services.layer1.gaussian_process import StructuralFitter
 from services.layer1.classifier import NodeClassifier
-from services.layer1.ambiguity import AmbiguityDetector
-from services.layer1.confidence import ConfidenceChecker
 
 router = APIRouter()
 
