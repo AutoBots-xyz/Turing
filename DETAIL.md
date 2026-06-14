@@ -1,69 +1,123 @@
-# Turing — Comprehensive Project Documentation
+# Turing
 
-> **Autonomous Causal Discovery & Cross-Domain Abstraction Engine**
+Autonomous Causal Discovery & Cross-Domain Abstraction Engine
+
+![Turing Demo](./demo/public/demo-placeholder.gif)
+
+## Why
+
+- **Breaks Domain Silos**: Automatically finds structurally isomorphic solutions across entirely different scientific and engineering domains, eliminating manual cross-domain literature review.
+- **True Causal Inference, Not Correlation**: Utilizes the PC Algorithm for directed causal discovery based on conditional independence, avoiding the common pitfalls of confusing correlation with causation.
+- **Drastically Reduces Experimental Cost**: An adversarial swarm of Bayesian Agents (Explorer, Exploiter, Contrarian) systematically simulates and tests interventions on the causal graph, rather than requiring hundreds of expensive physical experiments.
+
+## Features
+
+- ✅ **Automated Causal Discovery**: Ingests raw CSV data and maps causal topology using the PC Algorithm and NetworkX.
+- ✅ **Adversarial Agent Swarm**: Three unique agents push boundary exploration, peak refinement, and opposite boundary testing on the generated graph.
+- ✅ **Cross-Domain Isomorphism Search**: Uses Graph Edit Distance (GED) and LLM-driven abstractions to find structurally identical architectures in Semantic Scholar, Wikipedia, and Serper APIs.
+- ✅ **Real-time Pipeline Telemetry**: FastAPI backend streams pipeline progress directly to the Next.js frontend via Server-Sent Events (SSE).
+- ✅ **Automated Report Generation**: Synthesizes all findings into a comprehensive, actionable cross-domain research report using Anthropic's Claude.
+
+## Quick Start
+
+Fastest path from zero to working.
+
+```bash
+git clone https://github.com/AutoBots-xyz/Turing.git
+cd Turing
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
+## Installation
+
+### Prerequisites
+- Node.js 18+
+- Python 3.10+
+- Anthropic API Key
+- Serper API Key (Optional)
+
+### Setup
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/AutoBots-xyz/Turing.git
+   cd Turing
+   ```
+2. **Setup the Python Engine**
+   ```bash
+   cd python-engine
+   python -m venv venv
+   source venv/bin/activate  # Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   cp .env.example .env
+   ```
+3. **Configure Python Environment Variables**
+   Open `python-engine/.env` and add your API keys.
+4. **Initialize the Database & Server**
+   ```bash
+   uvicorn main:app --reload --port 8000
+   ```
+5. **Setup the Frontend**
+   Open a new terminal window.
+   ```bash
+   cd Turing/demo
+   npm install
+   npm run dev
+   ```
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | From [console.anthropic.com](https://console.anthropic.com/) — For LLM report generation. |
+| `SERPER_API_KEY` | No | From [serper.dev](https://serper.dev/) — For cross-domain web search. |
+| `DATABASE_URL` | No | Defaults to `sqlite:///./turing.db`. |
+| `NEXT_PUBLIC_API_URL` | No | Defaults to `http://localhost:8000`. |
+
+## Usage
+
+**Using the UI Dashboard:**
+1. Navigate to the "Ingest" tab and upload a raw observational CSV.
+2. The system maps the causal Directed Acyclic Graph (DAG) and identifies bottlenecks.
+3. The Bayesian swarm simulates interventions, searches external APIs, and generates the final LLM report.
+
+**Using the Headless API:**
+```python
+import requests
+
+# 1. Initialize a new pipeline run
+res = requests.post("http://localhost:8000/api/runs/")
+run_id = res.json()["id"]
+
+# 2. Upload dataset to trigger the autonomous swarm
+with open("dataset.csv", "rb") as f:
+    requests.post(
+        f"http://localhost:8000/api/runs/{run_id}/layer1/upload", 
+        files={"file": f}
+    )
+```
+
+## Tech Stack
+
+- **Next.js & React** — For a highly interactive, component-driven UI.
+- **FastAPI (Python)** — For a high-performance, async backend handling heavy compute.
+- **D3.js** — For complex, interactive, force-directed causal graph visualizations.
+- **SQLAlchemy & SQLite** — For reliable relational data persistence.
+- **Scikit-Learn & NetworkX** — For Gaussian Process regressions and graph manipulation.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md)
+
+## License
+
+MIT License — see [LICENSE](./LICENSE)
 
 ---
 
-## Table of Contents
+## Architecture Deep Dive
 
-1. [Project Overview](#1-project-overview)
-2. [Architecture](#2-architecture)
-3. [File Structure](#3-file-structure)
-4. [Workflow / Project Working](#4-workflow--project-working)
-5. [Frontend](#5-frontend)
-6. [Backend](#6-backend)
-7. [Python Engine / Core Processing Layer](#7-python-engine--core-processing-layer)
-8. [Layer-by-Layer Breakdown](#8-layer-by-layer-breakdown)
-9. [Data Flow](#9-data-flow)
-10. [Agent System](#10-agent-system)
-11. [LLM Integration](#11-llm-integration)
-12. [Impact / Outcomes](#12-impact--outcomes)
-13. [Design Decisions](#13-design-decisions)
-
----
-
-## 1. Project Overview
-
-### Purpose
-
-**Turing** is an autonomous AI pipeline that takes raw datasets or document files as input, automatically maps their causal topology, and then searches across entirely different scientific and engineering domains to find structurally isomorphic solutions to the bottlenecks it discovers. It bridges domain-specific problems with cross-domain knowledge using causal graph mathematics.
-
-### The Problem It Solves
-
-Classical research and engineering workflows are siloed: a biologist searching for why a biological pathway is bottlenecked would never think to look at aerospace fluid dynamics or supply chain logistics for an analogy. Turing eliminates this barrier by:
-
-1. Stripping domain-specific language from a causal graph using LLMs to create a "domain-blind" structural description.
-2. Searching across academic papers, patents, Wikipedia, and the web simultaneously.
-3. Mathematically matching structural patterns (graph isomorphism) to find analogous mechanisms in other domains.
-4. Ranking and reporting which analogies are best suited to solve the user's bottleneck.
-
-### Target Users
-
-- Research scientists and engineers investigating complex causal systems.
-- Teams working with tabular experiment data who want automated causal discovery.
-- Analysts with domain documents (PDFs, research papers) who want causal insight without manual extraction.
-- Organizations wanting to find cross-disciplinary inspiration for optimization problems.
-
-### Key Features / Capabilities
-
-| Feature | Description |
-|---|---|
-| **Dual-Path Ingestion** | Accepts CSV/XLSX (numerical data) via PC Algorithm, or PDF/TXT/DOCX (text) via LLM extraction |
-| **Autonomous Causal Discovery** | Runs the PC Algorithm (Fisher Z test) on tabular data to discover directed causal edges |
-| **LLM Graph Extraction** | Two-stage ontology-then-extraction pipeline for text documents |
-| **Graph Validation** | Cycle detection & breaking, contradiction flagging, physics-violation edge-flipping via LLM agent |
-| **Gaussian Process Fitting** | Fits GP structural equations to every causal edge for quantitative uncertainty tracking |
-| **Bayesian Agent Swarm** | Three adversarial ReAct agents (Explorer, Exploiter, Contrarian) run Bayesian Optimization on the causal graph |
-| **Do-Calculus Simulation** | Intervenes on source nodes and propagates uncertainty forward using GP predictions |
-| **4-Source Cross-Domain Search** | Parallel search across Semantic Scholar, Wikipedia, Serper (web), and Serper (patents) |
-| **Graph Isomorphism Matching** | Structural similarity scoring via NetworkX Graph Edit Distance |
-| **Bridge Ranking** | 4-factor validity scoring (structural, compatibility, transferability, evidence) |
-| **AI Report Generation** | LLM-generated final report with problem statement, executive summary, and recommended experiment |
-| **Real-time Frontend** | Next.js UI with SSE streaming, polling, D3.js force-directed graph visualization |
-
----
-
-## 2. Architecture
 
 ### High-Level System Architecture
 
