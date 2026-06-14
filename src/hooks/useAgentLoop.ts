@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Layer2State } from '../types/layer2';
+import { apiUrl } from '@/lib/api';
 
 export function useAgentLoop(runId: string) {
   const [state, setState] = useState<Layer2State | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     if (!runId) return;
@@ -13,7 +15,7 @@ export function useAgentLoop(runId: string) {
 
     const fetchAgentState = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/runs/${runId}/layer2/agents`);
+        const response = await fetch(apiUrl(`/api/runs/${runId}/layer2/agents`));
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -22,10 +24,12 @@ export function useAgentLoop(runId: string) {
         if (isMounted) {
           setState(data);
           setError(null); // Clear any previous errors on success
+          setIsLoading(false);
         }
       } catch (err) {
         if (isMounted) {
           setError(err instanceof Error ? err : new Error('Unknown error fetching Layer 2 agent state'));
+          setIsLoading(false);
         }
       }
     };
@@ -44,5 +48,5 @@ export function useAgentLoop(runId: string) {
     };
   }, [runId]);
 
-  return { state, error };
+  return { state, error, isLoading };
 }

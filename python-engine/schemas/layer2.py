@@ -146,7 +146,7 @@ class HeatmapPoint(BaseModel):
     """A single coordinate point on the generated causal heatmap."""
     x_val: float
     y_val: float
-    z_val: Optional[float] = Field(default=None, description="The predicted yield. Null if simulation fails.")
+    z_val: float = Field(description="The predicted yield")
     is_cliff: bool = Field(default=False, description="Flagged true if yield drops suddenly")
 
 class HeatmapInput(BaseModel):

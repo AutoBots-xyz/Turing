@@ -14,6 +14,12 @@ from dotenv import load_dotenv
 # Load .env before any other imports that might check env vars
 load_dotenv()
 
+# ---------------------------------------------------------------------------
+# Single source of truth for the API version.
+# Set APP_VERSION in .env or the deployment environment on each release.
+# ---------------------------------------------------------------------------
+APP_VERSION: str = os.getenv("APP_VERSION", "1.0.0")
+
 from database.database import init_db
 from routers import layer1, layer2, layer3, layer4, runs
 
@@ -28,7 +34,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Turing - Causal Nexus API",
     description="Causal Graph Discovery Engine Backend",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -37,7 +43,7 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,7 +61,7 @@ app.include_router(runs.router,   prefix="/api/runs",   tags=["Runs — Session 
 
 @app.get("/", tags=["Health"])
 async def root():
-    return {"status": "ok", "service": "turing-python-engine", "version": "1.0.0"}
+    return {"status": "ok", "service": "turing-python-engine", "version": APP_VERSION}
 
 
 @app.get("/health", tags=["Health"])

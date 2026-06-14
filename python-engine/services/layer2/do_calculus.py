@@ -127,10 +127,11 @@ class DoCalculusSimulator:
             else:
                 warnings.warn(
                     f"DoCalculusSimulator: node '{node}' has no predicted parents. "
-                    "Assigning high-uncertainty fallback.",
+                    "Skipping prediction — downstream nodes will correctly report high uncertainty.",
                     UserWarning,
                     stacklevel=2,
                 )
-                predictions[node] = GaussianPrediction(mean=0.0, std_dev=1.0)
+                # ERR-B17 fix: do NOT inject a fabricated 0.0 value.
+                # Just skip setting predictions[node].
 
         return SimulationStepOutput(predictions=predictions)

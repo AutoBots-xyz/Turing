@@ -1,4 +1,5 @@
 import warnings
+import random
 from typing import Dict
 from schemas.layer2 import SearchSpace, AgentProposal
 
@@ -59,7 +60,9 @@ class AgentExplorer:
                 push_details.append(f"{node}={val} (no space — not pushed)")
                 continue
 
-            val = base_point.get(node, (space.min + space.max) / 2)
+            # ERR-B18 fix: avoid meaningless exact mathematical center.
+            # Default to a random plausible value if the node is missing from base_point
+            val = base_point.get(node, random.uniform(space.min, space.max))
 
             if val < space.min or val > space.max:
                 warnings.warn(

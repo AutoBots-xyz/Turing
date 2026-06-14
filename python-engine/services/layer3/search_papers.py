@@ -15,25 +15,21 @@ def _deployment_status_from_citations(citation_count: int) -> str:
         return "deployed"
     elif citation_count >= 50:
         return "replicated"
-    elif citation_count >= 10:
+    elif citation_count >= 5:
         return "single_study"
     else:
-        return "unknown"
+        return "unverified"
 
 
-def _calculate_confidence(rank: int, citation_count: int) -> float:
+import math
+def _confidence_from_rank(rank: int, citation_count: int) -> float:
     """
-    Computes a mathematically grounded confidence score using a 
-    bounded sigmoid function on citation counts, penalized by search rank.
+    Calculates confidence using a grounded metric combining rank decay 
+    and logarithmic citation validation.
     """
-    import math
-    # Logistic growth based on citations (0 citations -> 50%, 100+ citations -> ~95%)
-    k = 0.05
-    base_confidence = 50.0 + 45.0 * (2 / (1 + math.exp(-k * citation_count)) - 1)
-    
-    # Exponential decay penalty based on search rank
-    rank_penalty = math.exp(-0.1 * rank)
-    return round(max(0.0, min(100.0, base_confidence * rank_penalty)), 1)
+    base_conf = 100.0 / (1.0 + 0.5 * rank)
+    cite_boost = 10.0 * math.log10(max(citation_count, 1))
+    return round(min(99.9, base_conf + cite_boost), 1)
 
 
 async def search_papers(query: StructuralQuery) -> List[SearchResult]:
@@ -79,7 +75,7 @@ async def search_papers(query: StructuralQuery) -> List[SearchResult]:
                     elif arxiv_id:
                         url = f"https://arxiv.org/abs/{arxiv_id}"
 
-                confidence = _calculate_confidence(rank, citation_count)
+                confidence = _confidence_from_rank(rank, citation_count)
                 deployment_status = _deployment_status_from_citations(citation_count)
                 replication_count = max(0, (citation_count - 10) // 50)
 

@@ -17,38 +17,28 @@ from schemas.graph import CausalGraph, Node
 
 class GPEngine:
     """
-    Mock Gaussian Process Engine.
-    In a real scenario, this would wrap scikit-learn's GaussianProcessRegressor or BoTorch.
-    For this architectural demonstration, it simulates mathematical prediction and uncertainty
-    compounding using a weighted-sum mean and quadrature uncertainty propagation.
+    Gaussian Process Engine.
+    Uses scikit-learn's GaussianProcessRegressor with RBF and White kernels
+    to mathematically predict causal propagation and compound uncertainty.
     """
     def __init__(self, base_noise: float = 0.02):
-        # Base noise added at each edge traversal.
-        # Increase for high-variance domains; decrease for tightly-controlled lab conditions.
         self.base_noise = base_noise
 
     def predict_child(self, parent_predictions: List[Dict[str, float]], edge_weights: List[Optional[float]]) -> Dict[str, float]:
         """
-        Takes a list of parent predictions (each having 'mean' and 'std_dev')
-        and the corresponding edge weights.
-        Returns the combined prediction for the child node using a real Gaussian Process.
-
-        Fixes ERR-B35: Replaces the mocked weighted average and quadrature math 
-        with a genuine scikit-learn GaussianProcessRegressor using RBF covariance kernels.
+        Propagates uncertainty through a real Gaussian Process fitted on the fly.
         """
-        try:
-            import numpy as np
-            from sklearn.gaussian_process import GaussianProcessRegressor
-            from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
-        except ImportError as e:
-            # Fixes ERR-B36: Do not fail silently.
-            raise ImportError(
-                "scikit-learn is required for the Gaussian Process Engine. "
-                "Please install it using 'pip install scikit-learn'."
-            ) from e
+        import warnings
+        import numpy as np
+        from sklearn.gaussian_process import GaussianProcessRegressor
+        from sklearn.gaussian_process.kernels import RBF, WhiteKernel
 
         if not parent_predictions:
-            warnings.warn("GPEngine.predict_child: called with no parents. Returning base noise fallback.")
+            warnings.warn(
+                "GPEngine.predict_child: called with no parents. Returning base noise fallback.",
+                UserWarning,
+                stacklevel=2
+            )
             return {"mean": 0.0, "std_dev": self.base_noise}
 
         if len(parent_predictions) != len(edge_weights):
@@ -57,30 +47,52 @@ class GPEngine:
                 f"does not match edge_weights length ({len(edge_weights)})."
             )
 
-        sanitized_weights = [w if w is not None else 0.5 for w in edge_weights]
+        sanitized_weights = []
+        for i, w in enumerate(edge_weights):
+            if w is None:
+                warnings.warn(
+                    f"GPEngine: edge_weights[{i}] is None — defaulting to 0.5. ",
+                    UserWarning,
+                    stacklevel=2
+                )
+                sanitized_weights.append(0.5)
+            else:
+                sanitized_weights.append(w)
 
-        means = np.array([p["mean"] for p in parent_predictions]).reshape(1, -1)
-        variances = np.array([p["std_dev"]**2 for p in parent_predictions])
-        weights_arr = np.array(sanitized_weights).reshape(-1, 1)
+        # Generate local synthetic points representing the parent distributions
+        n_samples = 50
+        X_train = np.zeros((n_samples, len(parent_predictions)))
+        y_train = np.zeros(n_samples)
 
-        # Synthesize local points to fit the GP since this is a zero-shot simulation
-        np.random.seed(42)
-        X_train = means + np.random.randn(50, len(sanitized_weights)) * np.sqrt(variances)
-        y_train = X_train.dot(weights_arr).ravel()
+        for i in range(len(parent_predictions)):
+            mean = parent_predictions[i]["mean"]
+            std = parent_predictions[i]["std_dev"]
+            weight = sanitized_weights[i]
+            
+            # Sample from the parent distribution
+            X_train[:, i] = np.random.normal(mean, max(std, 1e-4), n_samples)
+            # Propagate expected linear causal mechanism
+            y_train += X_train[:, i] * weight
 
-        # Fit a real Gaussian Process using RBF Covariance Kernel
-        kernel = C(1.0, (1e-3, 1e3)) * RBF(length_scale=1.0, length_scale_bounds=(1e-2, 1e2))
-        gp = GaussianProcessRegressor(kernel=kernel, alpha=self.base_noise**2, n_restarts_optimizer=0)
+        # Apply structural noise
+        y_train += np.random.normal(0, self.base_noise, n_samples)
+        y_train = np.maximum(0.0, y_train)  # Floor physical quantities
+
+        # Fit a real Gaussian Process to map the parent space to the child space
+        kernel = 1.0 * RBF(length_scale=np.ones(len(parent_predictions))) + WhiteKernel(noise_level=self.base_noise**2)
+        gp = GaussianProcessRegressor(kernel=kernel, normalize_y=True, random_state=42)
         
-        gp.fit(X_train, y_train)
-        
-        # Predict child state
-        y_pred, std_pred = gp.predict(means, return_std=True)
-
-        child_mean = max(0.0, float(y_pred[0]))
-        child_std = float(std_pred[0])
-
-        return {"mean": round(child_mean, 4), "std_dev": round(child_std, 4)}
+        try:
+            gp.fit(X_train, y_train)
+            X_test = np.array([[p["mean"] for p in parent_predictions]])
+            child_mean, child_std = gp.predict(X_test, return_std=True)
+            return {"mean": round(float(child_mean[0]), 4), "std_dev": round(float(child_std[0]), 4)}
+        except Exception as e:
+            # Fallback to mean quadrature only if the GP matrix inversion fails
+            warnings.warn(f"GP Fit failed, falling back: {e}")
+            child_mean = sum(p["mean"] * w for p, w in zip(parent_predictions, sanitized_weights))
+            child_std = math.sqrt(sum(p["std_dev"] ** 2 for p in parent_predictions) + self.base_noise ** 2)
+            return {"mean": round(max(0.0, child_mean), 4), "std_dev": round(child_std, 4)}
 
 
 # ==============================================================================
@@ -144,11 +156,8 @@ def refine_confidence_with_gp(graph: CausalGraph) -> CausalGraph:
         return CausalGraph(nodes=refined_nodes, edges=graph.edges)
 
     except ImportError as e:
-        # Fixes ERR-B36: Loudly fail when scikit-learn is missing instead of silently swallowing the error.
-        raise ImportError(
-            "scikit-learn is not installed. Confidence refinement requires 'scikit-learn' "
-            "for Gaussian Process Regression. Install it or disable GP refinement."
-        ) from e
+        # ERR-B36 fix: scikit-learn not installed — raise exception instead of silently failing
+        raise ImportError("scikit-learn is required for Gaussian Process confidence refinement") from e
 
 
 def _build_feature_matrix(graph: CausalGraph):

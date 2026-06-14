@@ -59,30 +59,27 @@ async def build_ontology_from_text(content: dict) -> CausalGraph:
     )
 
     client = _get_llm_client()
-    if client:
-        response = client.completion(
-            model="claude-3-5-sonnet-20241022",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
-        )
-        raw = response.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw.strip())
-        nodes = [Node(id=n["id"], label=n["label"], confidence=n["confidence"]) for n in data["nodes"]]
-        edges = [
-            Edge(source=e["source"], target=e["target"], relation=e["relation"], confidence=e["confidence"])
-            for e in data["edges"]
-        ]
-        return CausalGraph(nodes=nodes, edges=edges)
+    if not client:
+        # ERR-B37 fix: Remove naive heuristic Regex fallback.
+        raise EnvironmentError("ANTHROPIC_API_KEY is required to build causal graphs from text.")
 
-    # Fixes ERR-B37: Replaced brittle regex heuristic fallback with a fail-fast exception.
-    raise RuntimeError(
-        "Generative causal graph extraction failed: ANTHROPIC_API_KEY is missing. "
-        "Cannot reliably extract causal graphs from text without a configured LLM."
+    response = client.completion(
+        model="claude-3-5-sonnet-20241022",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=1000,
     )
+    raw = response.choices[0].message.content.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    data = json.loads(raw.strip())
+    nodes = [Node(id=n["id"], label=n["label"], confidence=n["confidence"]) for n in data["nodes"]]
+    edges = [
+        Edge(source=e["source"], target=e["target"], relation=e["relation"], confidence=e["confidence"])
+        for e in data["edges"]
+    ]
+    return CausalGraph(nodes=nodes, edges=edges)
 
 # ==============================================================================
 # 2. DUAL-STAGE ADVANCED LLM EXTRACTION (Harsh)
@@ -171,8 +168,8 @@ class LLMGraphBuilder:
             content = response.choices[0].message.content
             return json.loads(content)
         except Exception as e:
-            # Fixes ERR-B38: Do not silently swallow exceptions and inject fake ontologies.
-            raise RuntimeError(f"Generative ontology schema creation failed: {e}") from e
+            logger.error(f"Ontology generation failed: {e}")
+            raise RuntimeError(f"Ontology generation failed. The LLM could not process the request: {e}")
 
     @staticmethod
     def _extract_causal_edges(text: str, ontology: dict, model_name: str) -> list:
@@ -218,11 +215,10 @@ class LLMGraphBuilder:
                 )
                 content = response.choices[0].message.content.strip()
                 
-                # Strip markdown blocks if present
-                if content.startswith("```json"):
-                    content = content[7:-3]
-                elif content.startswith("```"):
-                    content = content[3:-3]
+                # ERR-B38 (assumed) fix: Robust JSON extraction
+                match = re.search(r'\[.*\]', content, re.DOTALL)
+                if match:
+                    content = match.group(0)
                     
                 edges = json.loads(content)
                 if isinstance(edges, list):

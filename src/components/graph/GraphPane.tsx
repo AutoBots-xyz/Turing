@@ -4,6 +4,8 @@ import { useRunState } from '@/hooks/useRunState';
 import { useGraphAnimation } from '@/hooks/useGraphAnimation';
 import { useSearchStream } from '@/hooks/useSearchStream';
 import { PipelineStep } from './D3GraphEngine';
+import { useParams } from 'next/navigation';
+import { apiUrl } from '@/lib/api';
 
 // D3GraphEngine touches SVG/DOM APIs — must be client-only
 const D3GraphEngine = dynamic(
@@ -12,8 +14,9 @@ const D3GraphEngine = dynamic(
 );
 
 export const GraphPane: React.FC = () => {
-  const runId = 'turing-active-run'; // In a real app, this would be passed via context or props
-  const API_BASE = 'http://127.0.0.1:8000';
+  const params = useParams();
+  const rawId = params?.runId;
+  const runId = Array.isArray(rawId) ? rawId[0] : rawId || '';
   
   const { runState } = useRunState(runId);
   const { graph } = useGraphAnimation(runId);
@@ -48,7 +51,7 @@ export const GraphPane: React.FC = () => {
   const handleRunDiscovery = async () => {
     try {
       setError(null);
-      const res = await fetch(`${API_BASE}/runs/${runId}/layer1`, {
+      const res = await fetch(apiUrl(`/api/runs/${runId}/layer1`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -61,7 +64,7 @@ export const GraphPane: React.FC = () => {
   const handleIdentifyBottleneck = async () => {
     try {
       setError(null);
-      const res = await fetch(`${API_BASE}/runs/${runId}/layer2`, {
+      const res = await fetch(apiUrl(`/api/runs/${runId}/layer2`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -74,7 +77,7 @@ export const GraphPane: React.FC = () => {
   const handleSearchCrossDomain = async () => {
     try {
       setError(null);
-      const res = await fetch(`${API_BASE}/runs/${runId}/layer3`, {
+      const res = await fetch(apiUrl(`/api/runs/${runId}/layer3`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });

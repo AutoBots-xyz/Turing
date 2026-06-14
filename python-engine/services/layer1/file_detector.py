@@ -101,12 +101,20 @@ class UniversalFileDetector:
             elif ext in ['txt', 'md']:
                 result = UniversalFileDetector._analyze_text(file_bytes)
             else:
-                # Default fallback, try to read as text
+                # Unknown extension — attempt text analysis as best-effort
+                logger.warning(
+                    f"Unknown extension '.{ext}' for file '{filename}'. "
+                    "Attempting text-path analysis."
+                )
                 result = UniversalFileDetector._analyze_text(file_bytes)
         except Exception as e:
-            logger.error(f"Error analyzing file {filename}: {e}")
-            result["path"] = "TEXT"
-            result["details"] = f"Failed to parse as data ({str(e)}), defaulting to text path."
+            # ERR-B09 fix: do NOT silently swallow and default to TEXT.
+            # Raise so the calling orchestrator can mark the run as failed
+            # and surface a real error to the user.
+            logger.error(f"Failed to analyse file '{filename}': {e}", exc_info=True)
+            raise ValueError(
+                f"File '{filename}' could not be analysed (ext='.{ext}'): {e}"
+            ) from e
 
         return result
 

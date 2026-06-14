@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
 import { useRunState } from "@/hooks/useRunState";
-import { useParams } from "next/navigation";
 
 // Official shell components
 import { TopNav, TabType } from "@/components/shell/TopNav";
@@ -23,18 +23,26 @@ import { ReportNav } from "@/components/layer4/ReportNav";
 import { StreamingReport } from "@/components/layer4/StreamingReport";
 import { ActionsPanel } from "@/components/layer4/ActionsPanel";
 
-interface PipelineRunPageProps {
-  params: {
-    runId?: string | string[];
-  };
-}
+export default function PipelineRunPage() {
+  const router = useRouter();
+  const params = useParams();
 
-export default function PipelineRunPage({ params }: PipelineRunPageProps) {
-  // Use params.runId, falling back to turing-active-run if empty or undefined
-  const runId = Array.isArray(params.runId) ? params.runId[0] : (params.runId || 'turing-active-run');
-  
+  // Resolve runId from the dynamic segment. useParams() always returns
+  // strings or string[] for matched segments — never a Promise.
+  const rawId = params?.runId;
+  const runId = Array.isArray(rawId) ? rawId[0] : rawId;
+
   const [activeTab, setActiveTab] = useState<TabType>("graph");
-  const { runState } = useRunState(runId);
+
+  // Guard: if there is no run ID in the URL, redirect to the landing page
+  // rather than silently loading a fake/stale run.
+  useEffect(() => {
+    if (!runId) {
+      router.replace("/");
+    }
+  }, [runId, router]);
+
+  const { runState } = useRunState(runId ?? "");
 
   // Automatically advance tabs as the backend transitions layers,
   // but still allow manual override via the UI clicks on the TopNav.
@@ -49,7 +57,13 @@ export default function PipelineRunPage({ params }: PipelineRunPageProps) {
         setActiveTab('canvas');
         break;
       case 3:
-        setActiveTab('search');
+        // Layer 3 handles both Search and Abstraction. We auto-advance to 
+        // the abstraction tab once the pipeline progresses past the search phase.
+        if (runState.progressPercentage > 65) {
+          setActiveTab('abstraction');
+        } else {
+          setActiveTab('search');
+        }
         break;
       case 4:
         setActiveTab('report');

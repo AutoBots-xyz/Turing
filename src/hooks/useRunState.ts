@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { RunState } from '../types/run';
+import { apiUrl } from '@/lib/api';
 
 export function useRunState(runId: string) {
   const [runState, setRunState] = useState<RunState | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     if (!runId) return;
@@ -13,7 +15,7 @@ export function useRunState(runId: string) {
 
     const fetchRunState = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/runs/${runId}/state`);
+        const response = await fetch(apiUrl(`/api/runs/${runId}/state`));
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -22,10 +24,12 @@ export function useRunState(runId: string) {
         if (isMounted) {
           setRunState(data);
           setError(null);
+          setIsLoading(false);
         }
       } catch (err) {
         if (isMounted) {
           setError(err instanceof Error ? err : new Error('Unknown error fetching global RunState'));
+          setIsLoading(false);
         }
       }
     };
@@ -43,5 +47,5 @@ export function useRunState(runId: string) {
     };
   }, [runId]);
 
-  return { runState, error };
+  return { runState, error, isLoading };
 }

@@ -130,18 +130,19 @@ class UnexploredZoneFinder:
                 for other_node in source_nodes:
                     if other_node != node:
                         other_space = payload.domain_config.get(other_node)
-                        if not other_space:
+                        if other_space:
+                            # ERR-B41 fix: Do not blindly pick the middle of the domain.
+                            if other_node in best_past:
+                                steady_val = best_past[other_node]
+                            else:
+                                raise ValueError(
+                                    f"UnexploredZoneFinder: No historical data available for '{other_node}'. "
+                                    "Cannot determine a statistically meaningful hold-steady baseline."
+                                )
+                        else:
                             raise ValueError(
                                 f"UnexploredZoneFinder: source node '{other_node}' is missing from domain_config. "
                                 "Cannot determine hold-steady baseline."
-                            )
-                        if other_node in best_past:
-                            steady_val = best_past[other_node]
-                        else:
-                            # Fixes ERR-B41: Prevent statistically meaningless middle-of-domain fallbacks
-                            raise ValueError(
-                                f"Cannot establish a steady-state baseline for '{other_node}'. It is missing from "
-                                "historical data, and blindly picking the domain midpoint is statistically invalid."
                             )
                         interventions[other_node] = steady_val
 
@@ -149,7 +150,7 @@ class UnexploredZoneFinder:
                     payload.nodes, payload.edges, interventions
                 )
                 
-                # Fixes ERR-B42: Remove fake Gaussian prediction injection
+                # ERR-B42 fix: Do not inject fake Gaussian Predictions
                 pred = sim_res.predictions.get(sink_node)
                 if not pred:
                     continue

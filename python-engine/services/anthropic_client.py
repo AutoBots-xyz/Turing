@@ -44,19 +44,15 @@ def generate_domain_blind_query(node: Node, graph: CausalGraph) -> str:
     )
 
     client = _get_llm_client()
-    if client:
-        response = client.completion(
-            model="claude-3-5-sonnet-20241022",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=100
-        )
-        return response.choices[0].message.content.strip()
+    if not client:
+        raise EnvironmentError("ANTHROPIC_API_KEY is required to generate domain-blind queries.")
 
-    # --- Fallback (no API key) ---
-    raise RuntimeError(
-        "Domain-blind query generation failed: ANTHROPIC_API_KEY is missing. "
-        "Cannot reliably generate structural queries without a configured LLM."
+    response = client.completion(
+        model="claude-3-5-sonnet-20241022",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=100
     )
+    return response.choices[0].message.content.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -87,30 +83,25 @@ async def extract_causal_graph_from_text(text: str) -> CausalGraph:
     )
 
     client = _get_llm_client()
-    if client:
-        response = client.completion(
-            model="claude-3-5-sonnet-20241022",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=800
-        )
-        raw = response.choices[0].message.content.strip()
-        # Strip markdown fences if present
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw.strip())
-        nodes = [Node(id=n["id"], label=n["label"], confidence=n["confidence"]) for n in data["nodes"]]
-        edges = [Edge(source=e["source"], target=e["target"], relation=e["relation"], confidence=e["confidence"]) for e in data["edges"]]
-        return CausalGraph(nodes=nodes, edges=edges)
+    if not client:
+        # ERR-B31 fix: Do not poison the extraction step with fabricated demo data.
+        raise EnvironmentError("ANTHROPIC_API_KEY is required to extract causal graphs.")
 
-    # --- Fallback (no API key) ---
-    # Fixes ERR-B31: Replaced hardcoded test mocks that poisoned the engine
-    # with a clear, fail-fast exception. Real graph extraction requires an LLM.
-    raise RuntimeError(
-        "Generative extraction failed: ANTHROPIC_API_KEY is missing. "
-        "Cannot reliably extract causal graphs from text without a configured LLM."
+    response = client.completion(
+        model="claude-3-5-sonnet-20241022",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=800
     )
+    raw = response.choices[0].message.content.strip()
+    # Strip markdown fences if present
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    data = json.loads(raw.strip())
+    nodes = [Node(id=n["id"], label=n["label"], confidence=n["confidence"]) for n in data["nodes"]]
+    edges = [Edge(source=e["source"], target=e["target"], relation=e["relation"], confidence=e["confidence"]) for e in data["edges"]]
+    return CausalGraph(nodes=nodes, edges=edges)
 
 
 # ---------------------------------------------------------------------------
@@ -136,76 +127,60 @@ async def evaluate_compatibility_and_transferability(
     )
 
     client = _get_llm_client()
-    if client:
-        response = client.completion(
-            model="claude-3-5-sonnet-20241022",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=60
-        )
-        raw = response.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw.strip())
-        compatibility = float(data["constraint_compatibility"])
-        transferability = float(data["solution_transferability"])
-        return min(1.0, max(0.0, compatibility)), min(1.0, max(0.0, transferability))
+    if not client:
+        # ERR-B32 fix: Do not mock semantic transferability with naive word intersection.
+        raise EnvironmentError("ANTHROPIC_API_KEY is required to evaluate transferability.")
 
-    # --- Fallback (no API key) ---
-    # Fixes ERR-B32: Replaced the fake semantic overlap calculation 
-    # (word set intersections) with a clear exception. 
-    raise RuntimeError(
-        "Semantic evaluation failed: ANTHROPIC_API_KEY is missing. "
-        "Cannot reliably evaluate constraint compatibility or transferability without a configured LLM."
+    response = client.completion(
+        model="claude-3-5-sonnet-20241022",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=60
     )
+    raw = response.choices[0].message.content.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    data = json.loads(raw.strip())
+    compatibility = float(data["constraint_compatibility"])
+    transferability = float(data["solution_transferability"])
+    return min(1.0, max(0.0, compatibility)), min(1.0, max(0.0, transferability))
 
 
 # ---------------------------------------------------------------------------
-# Function 4: classify_deployment_status
-# Fixes Error B23: Uses LLM to evaluate domain authority instead of hardcoded lists.
+# Function 4: evaluate_deployment_status
+# Fixes ERR-B23: Classifies domain authority dynamically using LLM
 # ---------------------------------------------------------------------------
-async def classify_deployment_status(url: str, snippet: str) -> str:
+async def evaluate_deployment_status(url: str, snippet: str) -> str:
     """
-    Layer 3 LLM call: Classifies the deployment status of a web search result.
-    Evaluates the snippet and URL domain to determine engineering authority.
+    Evaluates whether a search result represents a deployed production system,
+    a single study / academic paper, or just a blog/tutorial.
     """
     prompt = (
-        f"Analyze the following search result:\nURL: {url}\nSnippet: {snippet}\n\n"
-        "Classify the production deployment evidence into exactly one of these categories:\n"
-        "- 'deployed': Major engineering blogs, clear production deployment at scale (e.g., AWS, Netflix, Uber).\n"
-        "- 'replicated': Proven across multiple studies or companies.\n"
-        "- 'single_study': Authoritative technical publishers or isolated case studies.\n"
-        "- 'blog': Personal blogs, tutorials, or unverified claims.\n"
-        "- 'unknown': Cannot determine.\n\n"
-        "Return ONLY the category name. No explanation."
+        f"You are evaluating the engineering deployment status of a search result.\n"
+        f"URL: {url}\n"
+        f"Snippet: {snippet}\n\n"
+        "Classify the deployment status into exactly one of these three categories:\n"
+        "1. 'deployed' (Indicates a technology used in a real production system, often a major tech company case study or whitepaper)\n"
+        "2. 'single_study' (Indicates a formal academic paper, authoritative single experiment, or official documentation)\n"
+        "3. 'blog' (Indicates a tutorial, opinion piece, generic tech blog, or unverified source)\n\n"
+        "Return ONLY the category name in lowercase. No explanation."
     )
 
     client = _get_llm_client()
-    if client:
-        # Using litellm's acompletion for proper async behavior if available, else completion
-        try:
-            response = await client.acompletion(
-                model="claude-3-5-sonnet-20241022",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=10
-            )
-        except AttributeError:
-            response = client.completion(
-                model="claude-3-5-sonnet-20241022",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=10
-            )
-        cat = response.choices[0].message.content.strip().lower()
-        # Clean up any potential markdown or punctuation
-        cat = cat.strip("`'\".,\n")
-        valid = {"deployed", "replicated", "single_study", "blog", "unknown"}
-        if cat in valid:
-            return cat
+    if not client:
+        raise EnvironmentError("ANTHROPIC_API_KEY is required to evaluate deployment status.")
 
-    # --- Fallback (no API key) ---
-    raise RuntimeError(
-        "Deployment classification failed: ANTHROPIC_API_KEY is missing. "
-        "Cannot safely classify deployment status without a configured LLM."
-    )
-
+    try:
+        response = await asyncio.to_thread(
+            client.completion,
+            model="claude-3-5-sonnet-20241022",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=20
+        )
+        raw = response.choices[0].message.content.strip().lower()
+        if "deployed" in raw: return "deployed"
+        if "single_study" in raw: return "single_study"
+        return "blog"
+    except Exception as e:
+        raise EnvironmentError(f"Failed to evaluate deployment status: {e}")

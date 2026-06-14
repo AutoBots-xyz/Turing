@@ -13,7 +13,7 @@ from schemas.layer3 import (
 )
 from services.layer3.step11_search_engine import run_step_11_search
 from services.layer3.relation_extractor import run_relation_extraction
-from services.layer3.isomorphism_matcher import match_graphs
+from services.layer3.isomorphism import match_graphs
 from services.layer3.bridge_ranker import rank_bridges
 
 router = APIRouter()

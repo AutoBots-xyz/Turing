@@ -87,67 +87,54 @@ async def build_report(run_id: str, step14_response: Step14Response) -> FinalRep
     # LLM-generated report
     # -----------------------------------------------------------------------
     client = _get_llm_client()
-    if client:
-        prompt = (
-            "You are a cross-domain systems analyst generating a final report for an "
-            "engineering team. Based on the bridges below, generate a concise report.\n\n"
-            f"{context}\n\n"
-            "Return a JSON object with EXACTLY these keys:\n"
-            "  problem_statement: one sentence summarising the user's bottleneck problem\n"
-            "  executive_summary: 3-5 sentences explaining what the top bridge means "
-            "and how it solves the problem\n"
-            "  recommended_experiment: one specific, measurable experiment the team "
-            "should run first to validate the top bridge\n\n"
-            'Output ONLY valid JSON. No explanation, no markdown fences.'
-        )
-
-        response = client.completion(
-            model="claude-3-5-sonnet-20241022",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=600,
-        )
-        raw = response.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw.strip())
-
+    if not client:
+        # ERR-B28 fix: Instead of a fake deterministic mad-libs report, or a hard crash (HTTP 500),
+        # fail gracefully by explicitly telling the user in the report that the AI is disabled.
         return FinalReport(
             run_id=run_id,
-            problem_statement=data.get("problem_statement", "See executive summary."),
+            problem_statement="Report generation failed: ANTHROPIC_API_KEY is missing.",
             top_bridges=bridges,
-            executive_summary=data.get("executive_summary", "See top bridges."),
-            recommended_experiment=data.get("recommended_experiment", "See bridges."),
+            executive_summary=(
+                "The cross-domain bridges were successfully ranked, but the final generative "
+                "report could not be created because the Anthropic API key is not configured. "
+                "Please add ANTHROPIC_API_KEY to your environment variables."
+            ),
+            recommended_experiment="Configure ANTHROPIC_API_KEY to view AI-recommended experiments.",
             contradiction_warnings=contradiction_warnings,
-            confidence_disclaimer=confidence_disclaimer,
+            confidence_disclaimer="AI Generation Disabled.",
         )
 
-    # -----------------------------------------------------------------------
-    # Template fallback (no API key) - Fixes ERR-B28
-    # -----------------------------------------------------------------------
-    top = bridges[0]
-    top_title = top.match.mechanism.source_result.title
-    top_summary = top.match.mechanism.source_result.merged_summary
-    top_score = top.scores.final_score
+    prompt = (
+        "You are a cross-domain systems analyst generating a final report for an "
+        "engineering team. Based on the bridges below, generate a concise report.\n\n"
+        f"{context}\n\n"
+        "Return a JSON object with EXACTLY these keys:\n"
+        "  problem_statement: one sentence summarising the user's bottleneck problem\n"
+        "  executive_summary: 3-5 sentences explaining what the top bridge means "
+        "and how it solves the problem\n"
+        "  recommended_experiment: one specific, measurable experiment the team "
+        "should run first to validate the top bridge\n\n"
+        'Output ONLY valid JSON. No explanation, no markdown fences.'
+    )
+
+    response = client.completion(
+        model="claude-3-5-sonnet-20241022",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=600,
+    )
+    raw = response.choices[0].message.content.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    data = json.loads(raw.strip())
 
     return FinalReport(
         run_id=run_id,
-        problem_statement=(
-            "AI generative reporting unavailable. Displaying top-ranked structural match."
-        ),
+        problem_statement=data.get("problem_statement", "See executive summary."),
         top_bridges=bridges,
-        executive_summary=(
-            f"[SYSTEM NOTICE: Generative reporting disabled due to missing LLM configuration]\n\n"
-            f"Top Structural Match: {top_title}\n"
-            f"Match Score: {top_score:.2%}\n"
-            f"Raw Mechanism Summary: {top_summary}"
-        ),
-        recommended_experiment=(
-            top.match.mechanism.source_result.contradiction_analysis.recommended_experiment
-            if top.match.mechanism.source_result.contradiction_analysis
-            else "AI generative recommendations unavailable. Please review the raw mechanism above to design a validation experiment."
-        ),
+        executive_summary=data.get("executive_summary", "See top bridges."),
+        recommended_experiment=data.get("recommended_experiment", "See bridges."),
         contradiction_warnings=contradiction_warnings,
         confidence_disclaimer=confidence_disclaimer,
     )

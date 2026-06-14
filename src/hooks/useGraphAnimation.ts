@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { CausalGraph } from '../types/graph';
+import { apiUrl } from '@/lib/api';
 
 export function useGraphAnimation(runId: string) {
   const [graph, setGraph] = useState<CausalGraph | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     if (!runId) return;
@@ -13,7 +15,7 @@ export function useGraphAnimation(runId: string) {
 
     const fetchGraph = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/runs/${runId}/layer1/graph`);
+        const response = await fetch(apiUrl(`/api/runs/${runId}/layer1/graph`));
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -22,10 +24,12 @@ export function useGraphAnimation(runId: string) {
         if (isMounted) {
           setGraph(data);
           setError(null);
+          setIsLoading(false);
         }
       } catch (err) {
         if (isMounted) {
           setError(err instanceof Error ? err : new Error('Unknown error fetching Layer 1 Causal Graph'));
+          setIsLoading(false);
         }
       }
     };
@@ -43,5 +47,5 @@ export function useGraphAnimation(runId: string) {
     };
   }, [runId]);
 
-  return { graph, error };
+  return { graph, error, isLoading };
 }

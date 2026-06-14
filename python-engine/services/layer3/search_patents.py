@@ -1,9 +1,7 @@
 import os
 import httpx
-import asyncio
 from typing import List
 from schemas.layer3 import StructuralQuery, SearchResult, SearchSource
-from services.anthropic_client import classify_deployment_status
 
 # Serper.dev API — freemium, thousands of free searches (as specified in different.md)
 SERPER_API_URL = "https://google.serper.dev/patents"
@@ -54,16 +52,7 @@ async def search_patents(query: StructuralQuery) -> List[SearchResult]:
             patents = data.get("patents", [])
             total = len(patents)
 
-            # Fixes ERR-B45: Use LLM for deployment status instead of a hardcoded list of 8 companies
-            classification_tasks = [
-                classify_deployment_status(
-                    p.get("snippet", "") + " Assignee: " + p.get("assignee", "")
-                )
-                for p in patents
-            ]
-            deployment_statuses = await asyncio.gather(*classification_tasks)
-
-            for rank, (patent, deployment_status) in enumerate(zip(patents, deployment_statuses)):
+            for rank, patent in enumerate(patents):
                 title = patent.get("title", "Untitled Patent")
                 snippet = patent.get("snippet", title)
                 link = patent.get("link")
@@ -74,10 +63,13 @@ async def search_patents(query: StructuralQuery) -> List[SearchResult]:
                     f"https://patents.google.com/patent/{patent_number}" if patent_number else None
                 )
 
-                # Fixes ERR-B44: Removed fabricated citation proxy math.
-                # Only use real citation counts returned by the API, otherwise default to 0.
+                # ERR-B45 fix: Remove 8-company hardcoded whitelist. Any assignee implies commercial backing.
+                assignee = patent.get("assignee", "").strip()
+                deployment_status = "deployed" if assignee else "single_study"
+
+                # ERR-B44 fix: Remove fabricated `age * 15` citation math. Only use real data.
                 try:
-                    citation_count = int(patent.get("citedBy", 0))
+                    citation_count = int(patent.get("citationCount", 0))
                 except (ValueError, TypeError):
                     citation_count = 0
 

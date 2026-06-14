@@ -60,18 +60,16 @@ class AgentFactory:
         )
 
         client = _get_llm_client()
-        if client:
-            response = client.completion(
-                model="claude-3-5-sonnet-20241022",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=150
-            )
-            return response.choices[0].message.content.strip()
+        if not client:
+            # ERR-B29 fix: Do not perform naive string-matching masquerading as AI.
+            raise EnvironmentError("ANTHROPIC_API_KEY is required to run the Skeptic agent.")
 
-        # --- Fallback (no API key) ---
-        # Fixes ERR-B29: Removed brittle string-matching hack. 
-        # Without an LLM, we cannot safely detect mechanistic contradictions.
-        return "ACCEPTED. No direct contradictions found in other sources (Adversarial check bypassed)."
+        response = client.completion(
+            model="claude-3-5-sonnet-20241022",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=150
+        )
+        return response.choices[0].message.content.strip()
 
     @staticmethod
     async def run_synthesizer(
@@ -99,25 +97,23 @@ class AgentFactory:
             )
 
             client = _get_llm_client()
-            if client:
-                response = client.completion(
-                    model="claude-3-5-sonnet-20241022",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=200
-                )
-                raw = response.choices[0].message.content.strip()
-                if raw.startswith("```"):
-                    raw = raw.split("```")[1]
-                    if raw.startswith("json"):
-                        raw = raw[4:]
-                data = json.loads(raw.strip())
-                consensus = data.get("consensus", "Conflict confirmed between sources.")
-                experiment = data.get("experiment", "Design a controlled comparative experiment.")
-            else:
-                # Fixes ERR-B30: Transparent fallback instead of fake generative strings.
-                # Do not pretend to synthesize a bespoke experiment without an LLM.
-                consensus = "[SYSTEM NOTICE: AI Synthesizer unavailable. Conflict unresolved.]"
-                experiment = "[SYSTEM NOTICE: AI experiment generation unavailable due to missing LLM configuration. Manual review required.]"
+            if not client:
+                # ERR-B30 fix: Do not perform hardcoded string slicing to fake a consensus.
+                raise EnvironmentError("ANTHROPIC_API_KEY is required to run the Synthesizer agent.")
+
+            response = client.completion(
+                model="claude-3-5-sonnet-20241022",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=200
+            )
+            raw = response.choices[0].message.content.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            data = json.loads(raw.strip())
+            consensus = data.get("consensus", "Conflict confirmed between sources.")
+            experiment = data.get("experiment", "Design a controlled comparative experiment.")
 
             nature = skeptic_arg.replace("REJECTED. ", "")
         else:

@@ -150,8 +150,14 @@ async def run_round(payload: RoundInput):
     best_values = {}
     
     for prop, sim_res in results:
-        pred = sim_res.predictions.get(sink_node_name, GaussianPrediction(mean=0.0, std_dev=1.0))
+        pred = sim_res.predictions.get(sink_node_name)
         
+        # ERR-B15 fix: If the simulation didn't produce a prediction for the
+        # sink node (e.g. disconnected graph or calculation error), skip it gracefully
+        # instead of fabricating fake data that poisons the Bayesian optimizer.
+        if not pred:
+            continue
+            
         ambiguity_reduction = pred.mean / (pred.std_dev + 0.001)
         
         sim_outputs.append(SimulationResult(

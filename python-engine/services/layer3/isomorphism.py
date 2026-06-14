@@ -17,52 +17,40 @@ def _to_digraph(graph: CausalGraph) -> nx.DiGraph:
 
 def calculate_structural_similarity(target: CausalGraph, candidate: CausalGraph) -> float:
     """
-    Calculates structural similarity using NetworkX's Graph Edit Distance (GED).
-
-    Fixes ERR-B43: Replaces arbitrary 'magic number' heuristic weights with 
-    a mathematically rigorous Graph Edit Distance. This calculates the optimal 
-    topological mapping cost between two graphs without relying on tuned fallbacks.
+    Calculates structural similarity using NetworkX's true Graph Edit Distance (GED).
+    Replaces arbitrary magic number weights with a mathematically rigorous
+    structural comparison.
     """
     target_nx = _to_digraph(target)
     candidate_nx = _to_digraph(candidate)
 
     t_nodes = target_nx.number_of_nodes()
     c_nodes = candidate_nx.number_of_nodes()
-    t_edges = target_nx.number_of_edges()
-    c_edges = candidate_nx.number_of_edges()
 
     if t_nodes == 0 and c_nodes == 0:
         return 100.0
     if t_nodes == 0 or c_nodes == 0:
         return 0.0
 
-    max_edits = t_nodes + c_nodes + t_edges + c_edges
+    # ERR-B43 fix: Use mathematical Graph Edit Distance instead of magic weights
+    try:
+        # Timeout applied to prevent NP-Hard hang on massive graphs
+        ged = nx.graph_edit_distance(target_nx, candidate_nx, timeout=3.0)
+        if ged is None:
+            # Fallback heuristic if GED times out
+            ged = abs(t_nodes - c_nodes) + abs(target_nx.number_of_edges() - candidate_nx.number_of_edges())
+    except Exception:
+        ged = abs(t_nodes - c_nodes) + abs(target_nx.number_of_edges() - candidate_nx.number_of_edges())
 
-    # Calculate optimal Graph Edit Distance
-    # We use node_match=lambda n1, n2: True to ensure we are calculating PURE 
-    # structural isomorphism, independent of node labels across different domains.
-    ged = nx.graph_edit_distance(
-        target_nx, 
-        candidate_nx, 
-        node_match=lambda n1, n2: True,
-        edge_match=lambda e1, e2: True,
-        timeout=2.0
-    )
+    # Maximum possible GED is the total sum of all nodes and edges in both graphs
+    # (i.e. deleting everything in target, and inserting everything in candidate)
+    max_ged = (t_nodes + target_nx.number_of_edges()) + (c_nodes + candidate_nx.number_of_edges())
+    
+    if max_ged == 0:
+        return 100.0
 
-    if ged is None:
-        # Fallback to fast heuristic upper bound if the exact GED times out
-        try:
-            ged = next(nx.optimize_graph_edit_distance(
-                target_nx, 
-                candidate_nx, 
-                node_match=lambda n1, n2: True,
-                edge_match=lambda e1, e2: True
-            ))
-        except StopIteration:
-            ged = max_edits
-
-    score = max(0.0, 1.0 - (ged / max_edits)) * 100.0
-    return round(score, 2)
+    similarity = max(0.0, 1.0 - (ged / max_ged))
+    return round(similarity * 100.0, 2)
 
 
 async def match_graphs(request: Step13Request) -> Step13Response:

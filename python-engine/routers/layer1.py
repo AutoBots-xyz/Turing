@@ -191,7 +191,7 @@ async def build_graph(
             
         else:
             text = payload.get("text")
-            model_name = payload.get("model_name", "gpt-4o") # User specified model
+            model_name = payload.get("model_name") or os.getenv("DEFAULT_LLM_MODEL", "gpt-4o")
             
             if not text:
                 raise ValueError("TEXT path requires 'text' string in payload")
@@ -214,7 +214,7 @@ async def validate_graph(
     runs the autonomous physics checks, breaks cycles, and flags contradictions.
     """
     graph_data = payload.get("graph")
-    model_name = payload.get("model_name", "gpt-4o")
+    model_name = payload.get("model_name") or os.getenv("DEFAULT_LLM_MODEL", "gpt-4o")
     
     if not graph_data or not isinstance(graph_data, dict):
         raise HTTPException(status_code=400, detail="Missing or invalid 'graph' object in payload")

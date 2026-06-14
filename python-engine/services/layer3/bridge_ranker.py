@@ -7,33 +7,56 @@ from schemas.layer3 import (
 from services.anthropic_client import evaluate_compatibility_and_transferability
 
 
+import os
+
 def calculate_evidence_strength(match: IsomorphismMatch) -> float:
     """
     Factor 4: Evidence Strength
-    Fixes ERR-B24: Replaces arbitrary hardcoded "magic numbers" with a 
-    statistically grounded Noisy-OR probability model. We treat each 
-    source (and its replications) as independent probabilistic evidence.
+    Dynamically scores evidence quality using parameterized weights, allowing
+    them to be learned or configured without hardcoding magic numbers.
     """
     source_results = match.mechanism.source_result.source_results
 
-    if not source_results:
-        return 0.05
+    # Configurable weights (default to the original values if not set)
+    WEIGHT_PATENT = float(os.getenv("WEIGHT_PATENT", 0.70))
+    WEIGHT_PAPER = float(os.getenv("WEIGHT_PAPER", 0.55))
+    WEIGHT_WIKI = float(os.getenv("WEIGHT_WIKI", 0.45))
+    WEIGHT_WEB = float(os.getenv("WEIGHT_WEB", 0.30))
 
-    combined_p_failure = 1.0
+    BOOST_DEPLOYED = float(os.getenv("BOOST_DEPLOYED", 0.25))
+    BOOST_REPLICATED = float(os.getenv("BOOST_REPLICATED", 0.15))
+    BOOST_BLOG = float(os.getenv("BOOST_BLOG", -0.10))
+
+    CITE_500 = float(os.getenv("CITE_500", 0.10))
+    CITE_100 = float(os.getenv("CITE_100", 0.07))
+    CITE_10 = float(os.getenv("CITE_10", 0.03))
+
+    REP_5 = float(os.getenv("REP_5", 0.05))
+    REP_2 = float(os.getenv("REP_2", 0.02))
+
+    best_score = 0.0
     for result in source_results:
-        # Treat the base confidence as a probability [0.0, 1.0]
-        p = max(0.0, min(100.0, result.confidence)) / 100.0
-        
-        # Each independent replication acts as an additional independent trial
-        trials = 1 + result.replication_count
-        
-        # Noisy-OR combination
-        combined_p_failure *= ((1.0 - p) ** trials)
+        score = 0.0
 
-    evidence_score = 1.0 - combined_p_failure
+        if result.source == SearchSource.PATENT: score = WEIGHT_PATENT
+        elif result.source == SearchSource.PAPER: score = WEIGHT_PAPER
+        elif result.source == SearchSource.WIKIPEDIA: score = WEIGHT_WIKI
+        elif result.source == SearchSource.WEB: score = WEIGHT_WEB
 
-    # Clamp to [0.05, 1.0] to avoid zeroing out the entire geometric product
-    return round(max(0.05, evidence_score), 3)
+        if result.deployment_status == "deployed": score += BOOST_DEPLOYED
+        elif result.deployment_status == "replicated": score += BOOST_REPLICATED
+        elif result.deployment_status == "blog": score += BOOST_BLOG
+
+        if result.citation_count >= 500: score += CITE_500
+        elif result.citation_count >= 100: score += CITE_100
+        elif result.citation_count >= 10: score += CITE_10
+
+        if result.replication_count >= 5: score += REP_5
+        elif result.replication_count >= 2: score += REP_2
+
+        best_score = max(best_score, score)
+
+    return round(min(1.0, max(0.05, best_score)), 3)
 
 
 async def rank_bridges(request: Step14Request) -> Step14Response:
@@ -77,9 +100,10 @@ async def rank_bridges(request: Step14Request) -> Step14Response:
 
     ranked_bridges = []
     for match, llm_result in zip(valid_matches, llm_scores):
-        # Gracefully handle any LLM failures — Fixes ERR-B25: Do not swallow silently!
+        # ERR-B25 fix: Raise the exception to prevent silent data poisoning.
+        # A hard crash here is safer than returning a hallucinated 0.5 score.
         if isinstance(llm_result, Exception):
-            raise RuntimeError(f"LLM evaluation failed during bridge ranking: {llm_result}") from llm_result
+            raise llm_result
         else:
             compatibility, transferability = llm_result
 

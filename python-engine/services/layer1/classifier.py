@@ -1,79 +1,4 @@
-
-services/layer1/classifier.py — Input Classifier
-
-Fixes Error 5 (Batch 4): This file was completely empty.
-Classifies the parsed input into one of two pipeline paths:
-  - Data Path:  tabular CSV data → PC Algorithm causal discovery
-  - Text Path:  document/text → LLM ontology building
 """
-from services.layer1.file_detector import InputType
-
-
-def classify_path(file_path: str) -> str:
-    """
-    Determines which Layer 1 processing path to use based on file type.
-
-    Fixes ERR-B33: Parses internal file headers (magic numbers) to reliably 
-    classify files, rather than blindly trusting file extensions or enums.
-
-    Returns
-    -------
-    str
-        "DATA_PATH" — for CSV/XLSX files (uses PC Algorithm)
-        "TEXT_PATH" — for PDF/TXT/DOCX files (uses LLM ontology builder)
-    """
-    import os
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"File not found: {file_path}")
-
-    with open(file_path, "rb") as f:
-        header = f.read(4)
-
-    # %PDF
-    if header.startswith(b"%PDF"):
-        return "TEXT_PATH"
-
-    # PK.. (ZIP archives like DOCX, XLSX)
-    if header.startswith(b"PK\x03\x04"):
-        if file_path.lower().endswith(".xlsx"):
-            return "DATA_PATH"
-        return "TEXT_PATH"
-
-    # Verify if readable as text for CSV/TXT
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            f.read(1024)
-        if file_path.lower().endswith(".csv"):
-            return "DATA_PATH"
-        return "TEXT_PATH"
-    except UnicodeDecodeError:
-        pass
-
-    raise ValueError(f"Cannot classify file: invalid or unsupported internal headers in {file_path}")
-
-
-def classify_parsed_content(content: dict) -> str:
-    """
-    Alternative classifier that works from parsed content metadata
-    when the original file extension is unavailable.
-
-    Parameters
-    ----------
-    content : dict
-        The output of universal_parser.parse_file() — must contain a "type" key.
-
-    Returns
-    -------
-    str
-        "DATA_PATH" or "TEXT_PATH"
-    """
-    content_type = content.get("type", "")
-    if content_type == "tabular":
-        return "DATA_PATH"
-    elif content_type == "text":
-        return "TEXT_PATH"
-    else:
-        raise ValueError(f"Unknown content type: '{content_type}'")
 FILE: python-engine/services/layer1/classifier.py
 PURPOSE: Step 6 - Node Classifier. Analyzes graph topology and mathematically assigns semantic roles (Source, Sink, Bottleneck) and UI themes.
 """
@@ -170,13 +95,12 @@ class NodeClassifier:
                     messages=[{"role": "user", "content": prompt}],
                     response_format={"type": "json_object"} if "gpt" in model_name else None
                 )
-                import re
                 content = response.choices[0].message.content.strip()
-                
-                # Fixes ERR-B34: Use robust regex for JSON extraction instead of brittle string slicing
-                json_match = re.search(r'\[.*\]', content, re.DOTALL)
-                if json_match:
-                    content = json_match.group(0)
+                import re
+                # ERR-B34 fix: Use regex to robustly extract JSON block instead of fragile string slicing
+                match = re.search(r'\[.*\]', content, re.DOTALL)
+                if match:
+                    content = match.group(0)
                     
                 gaps = json.loads(content)
                 if isinstance(gaps, dict):

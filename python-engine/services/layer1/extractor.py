@@ -2,6 +2,7 @@
 import io
 import json
 import logging
+import os
 import statistics
 import re
 from typing import Dict, Any, Tuple, List
@@ -143,8 +144,12 @@ class UniversalExtractor:
             elif ext in ['pdf']:
                 df = UniversalExtractor._extract_tables_from_pdf(file_bytes)
             else:
-                # Fallback, try reading as CSV
-                df = pd.read_csv(io.BytesIO(file_bytes))
+                # ERR-B10 fix: raise immediately for unsupported extensions rather
+                # than blindly trying pd.read_csv() and confusing the error trail.
+                raise ValueError(
+                    f"Unsupported file extension '.{ext}'. "
+                    "Supported data formats: csv, xlsx, xls, json, pdf."
+                )
         except Exception as e:
             logger.error(f"Failed to parse {filename} as data: {e}")
             raise ValueError(f"Could not parse file as tabular data. Error: {e}")
@@ -234,86 +239,20 @@ class UniversalExtractor:
             raise ValueError("No numeric columns found after processing. Mathematical simulation impossible.")
 
         # 3. Check for low data warning
+        # ERR-B11 fix: threshold is configurable via MIN_DATA_ROWS env var
+        min_rows = int(os.getenv("MIN_DATA_ROWS", "30"))
         final_len = len(numeric_df)
-        if final_len < 30:
-            warnings.append(f"LOW_DATA_WARNING: Dataset has only {final_len} rows. Causal discovery confidence may be low. Minimum 30 rows recommended.")
+        if final_len < min_rows:
+            warnings.append(
+                f"LOW_DATA_WARNING: Dataset has only {final_len} rows. "
+                f"Causal discovery confidence may be low. "
+                f"Minimum {min_rows} rows recommended."
+            )
 
         return numeric_df, warnings
 
 
-# ─── AmbiguityDetector (Steps 7 & 8) ─────────────────────────────────────────
-
-class AmbiguityDetector:
-    """
-    Steps 7 & 8: Gatekeeper for Layer 1. Evaluates graph confidence.
-    """
-
-    @staticmethod
-    def analyze_graph(graph_data: dict) -> dict:
-        """
-        Calculates edge confidences and ranks node urgency.
-        """
-        nodes = graph_data.get("nodes", [])
-        edges = graph_data.get("edges", [])
-
-        if not nodes or not edges:
-            graph_data["requires_layer2"] = False
-            graph_data["overall_graph_confidence"] = 100
-            graph_data["urgent_nodes"] = []
-            return graph_data
-
-        logger.info(f"Running Ambiguity Detector on {len(edges)} edges...")
-
-        total_confidence = 0
-        node_confidences: Dict[str, List[float]] = {n["id"]: [] for n in nodes}
-
-        # Step 7a: Score every edge
-        for edge in edges:
-            raw_val = edge.get("confidence")
-            if raw_val is None:
-                raw_val = edge.get("weight", 0.5)
-
-            abs_val = min(abs(float(raw_val)), 1.0)
-            pct_val = round(abs_val * 100)
-            edge["confidence_score"] = pct_val
-            total_confidence += pct_val
-
-            if pct_val > 85:
-                edge["confidence_flag"] = "✅"
-            elif pct_val >= 50:
-                edge["confidence_flag"] = "⚠️"
-            else:
-                edge["confidence_flag"] = "❌"
-
-            source = edge.get("source", "?")
-            target = edge.get("target", "?")
-            edge["confidence_label"] = f"{source} → {target} {pct_val}% {edge['confidence_flag']}"
-
-            if source in node_confidences:
-                node_confidences[source].append(pct_val)
-            if target in node_confidences:
-                node_confidences[target].append(pct_val)
-
-        # Step 7b: Find unknown nodes and rank by urgency
-        urgent_nodes = []
-        for node in nodes:
-            node_id = node["id"]
-            confs = node_confidences.get(node_id, [])
-            min_conf = min(confs) if confs else 0
-            node["urgency_score"] = min_conf
-
-            if min_conf < 85:
-                urgent_nodes.append({
-                    "node_id": node_id,
-                    "urgency_score": min_conf,
-                    "label": f"Node {node_id} {min_conf}%"
-                })
-
-        urgent_nodes.sort(key=lambda x: x["urgency_score"])
-        graph_data["urgent_nodes"] = urgent_nodes
-
-        overall_conf = round(total_confidence / len(edges)) if edges else 100
-        graph_data["overall_graph_confidence"] = overall_conf
-
-        logger.info(f"Ambiguity Detector finished. Ranked {len(urgent_nodes)} nodes by urgency.")
-        return graph_data
+# NOTE: AmbiguityDetector was previously duplicated here.
+# The canonical implementation now lives in services/layer1/ambiguity.py.
+# Import from there if you need AmbiguityDetector in this module:
+# from services.layer1.ambiguity import AmbiguityDetector

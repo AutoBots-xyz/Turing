@@ -1,4 +1,5 @@
 import warnings
+import random
 from typing import Dict
 from schemas.layer2 import SearchSpace, AgentProposal
 
@@ -60,7 +61,8 @@ class AgentContrarian:
                 challenge_details.append(f"{node}={val} (no space — not challenged)")
                 continue
 
-            val = base_point.get(node, (space.min + space.max) / 2)
+            # ERR-B21 fix: use random uniform instead of exact center
+            val = base_point.get(node, random.uniform(space.min, space.max))
 
             dist_to_min = abs(val - space.min)
             dist_to_max = abs(val - space.max)

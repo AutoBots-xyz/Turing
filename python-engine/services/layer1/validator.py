@@ -206,16 +206,23 @@ class GraphValidator:
             batch_json = json.dumps([{"source": e["source"], "target": e["target"]} for e in batch], indent=2)
             
             prompt = f"""
-            You are a Physics and Logic Validator Agent. Look at these discovered causal edges:
+            You are a Physics, Logic, and Causality Validator Agent. Look at these discovered causal edges:
             {batch_json}
-            
-            Are any of these causal directions physically, chronologically, or logically impossible? 
-            For example, an outcome/measurement (Yield, Accuracy) cannot cause a fundamental input (Temperature, Epochs).
-            
+
+            Are any of these causal directions physically, chronologically, or logically impossible?
+            The core rule: an outcome or measurement variable CANNOT be the cause of a fundamental
+            input or independent variable. Cause must precede effect in time or logical order.
+
+            Domain-agnostic examples of impossible edges (for structural guidance only — do NOT
+            assume the data is about any of these specific domains):
+            - Medical:        "Survival_Rate" → "Dosage"      (outcome cannot cause input)
+            - Manufacturing:  "Yield"         → "Temperature" (measurement cannot cause setting)
+            - Finance:        "Return"        → "Investment"  (result cannot cause its own cause)
+
             If an edge is backwards, list it so we can flip it.
             Respond ONLY with a valid JSON array of objects representing the edges that must be flipped.
-            Schema: [{{"source": "Yield", "target": "Temperature", "reason": "Outcome cannot cause input"}}]
-            If all are fine, return an empty array [].
+            Schema: [{{"source": "OutcomeNode", "target": "InputNode", "reason": "brief causal violation explanation"}}]
+            If all edges are causally plausible, return an empty array [].
             """
             
             try:
@@ -340,8 +347,31 @@ class StructuralFitter:
             X = df[valid_parents].values
             y = df[node_id].values
 
-            kernel = 1.0 * RBF(length_scale=1.0) + WhiteKernel(noise_level=1.0)
-            gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=5, normalize_y=True, random_state=42)
+            # ERR-B07 fix: initialise kernel from data statistics so the
+            # optimizer starts in a sensible region for this specific variable
+            # pair rather than always using 1.0 regardless of scale.
+            x_std = float(np.std(X)) if X.size else 1.0
+            y_std = float(np.std(y)) if y.size else 1.0
+            init_length_scale = max(x_std, 1e-3)   # avoid degenerate 0-scale
+            init_noise_level  = max(y_std * 0.1, 1e-4)
+
+            kernel = (
+                1.0 * RBF(length_scale=init_length_scale)
+                + WhiteKernel(noise_level=init_noise_level)
+            )
+
+            # ERR-B06 fix: random_state is None in production (non-deterministic,
+            # surfaces true optimizer instability) and can be fixed via
+            # GP_RANDOM_STATE env var for reproducible local testing.
+            _rs_env = os.getenv("GP_RANDOM_STATE")
+            random_state = int(_rs_env) if _rs_env is not None else None
+
+            gp = GaussianProcessRegressor(
+                kernel=kernel,
+                n_restarts_optimizer=5,
+                normalize_y=True,
+                random_state=random_state,
+            )
 
             try:
                 gp.fit(X, y)

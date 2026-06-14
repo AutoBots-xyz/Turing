@@ -1,4 +1,6 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ============================================================
+# TURING — CAUSAL NEXUS PROJECT .gitignore
+# ============================================================
 
 # ============================================================
 # SECRETS — NEVER COMMIT THESE
@@ -97,30 +99,10 @@ out/
 build/
 /build
 
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# local env files (do NOT ignore .env.example)
-.env
-.env*.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# vercel
+# Vercel
 .vercel
 
-# typescript
+# TypeScript build info
 *.tsbuildinfo
 next-env.d.ts
 
@@ -163,7 +145,9 @@ $RECYCLE.BIN/
 
 # JetBrains
 .idea/
-.vscode/
+*.iml
+
+# Vim / Emacs
 *.swp
 *.swo
 *~

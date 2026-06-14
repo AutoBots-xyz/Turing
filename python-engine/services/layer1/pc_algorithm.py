@@ -66,12 +66,8 @@ def run_pc_algorithm(content: dict) -> CausalGraph:
         return CausalGraph(nodes=nodes, edges=edges)
 
     except ImportError as e:
-        # Fixes ERR-B39: Replaced "Correlation is Causation" fallback with fail-fast exception.
-        raise ImportError(
-            "Mathematical causal discovery failed: 'causal-learn' is not installed. "
-            "The PC Algorithm requires this library to reliably infer causation (correlation is not causation)."
-        ) from e
-
+        # ERR-B39 fix: Correlation is not causation. Do not fallback to Pearson correlation.
+        raise ImportError("causal-learn is required to run the PC Algorithm for causal discovery.") from e
 # ==============================================================================
 # 2. ADVANCED NETWORKX EXTRACTION (Harsh)
 # ==============================================================================
