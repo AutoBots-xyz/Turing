@@ -388,15 +388,15 @@ export const D3GraphEngine: React.FC<D3GraphEngineProps> = ({
           </h3>
           <div className="flex justify-between my-1.5 leading-relaxed">
             <span className="text-[#666666] font-semibold">Value</span>
-            <span className="text-black font-mono">{tooltip.node.value.toFixed(2)}</span>
+            <span className="text-black font-mono">{(tooltip.node.value || 0).toFixed(2)}</span>
           </div>
           <div className="flex justify-between my-1.5 leading-relaxed">
             <span className="text-[#666666] font-semibold">β Coefficient</span>
-            <span className="text-black font-mono">{tooltip.node.beta.toFixed(3)}</span>
+            <span className="text-black font-mono">{(tooltip.node.beta || 0).toFixed(3)}</span>
           </div>
           <div className="flex justify-between my-1.5 leading-relaxed">
             <span className="text-[#666666] font-semibold">Type</span>
-            <span className="text-black font-mono uppercase">{tooltip.node.type}</span>
+            <span className="text-black font-mono uppercase">{tooltip.node.type || 'unknown'}</span>
           </div>
         </div>
       )}

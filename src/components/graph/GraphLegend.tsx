@@ -24,12 +24,14 @@ export const GraphLegend: React.FC<GraphLegendProps> = ({
       <span className="block text-[11px] font-bold text-[#E91E63] mb-2 uppercase tracking-[0.5px]">Entity Types</span>
       <div className="flex flex-wrap gap-x-4 gap-y-2 max-w-[320px]">
         {types.map((type) => {
+          if (!type) return null;
+          
           // If a type doesn't have a specific color mapped, fall back to neutral gray
           const color = colorMap[type] || '#999999';
           return (
             <div key={type} className="flex items-center gap-1.5 text-[12px] text-[#666] font-medium">
               <div className="w-2.5 h-2.5 rounded-full border border-black/10 shrink-0" style={{ background: color }} />
-              {type.charAt(0).toUpperCase() + type.slice(1)}
+              {typeof type === 'string' ? type.charAt(0).toUpperCase() + type.slice(1) : String(type)}
             </div>
           );
         })}
