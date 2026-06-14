@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from 'react';
+import { useParams } from 'next/navigation';
 import { ExperimentHistoryTable } from './ExperimentHistoryTable';
 import { Heatmap } from './Heatmap';
 import { useAgentLoop } from '@/hooks/useAgentLoop';
@@ -36,7 +37,9 @@ export const AgentStatusPanel: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Connect to global backend orchestrator
-  const runId = 'turing-active-run';
+  const params = useParams();
+  const rawId = params?.runId;
+  const runId = Array.isArray(rawId) ? rawId[0] : rawId || '';
   const { state, error } = useAgentLoop(runId);
 
   // Auto-scroll logic: gracefully scroll to bottom when new agents are streamed in,

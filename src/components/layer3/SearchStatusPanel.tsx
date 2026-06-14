@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { useParams } from 'next/navigation';
 import { useSearchStream } from '@/hooks/useSearchStream';
 import { SearchSource, BridgeResult } from '@/types/layer3';
 
@@ -140,7 +141,9 @@ const RadarLockCard: React.FC<RadarLockCardProps> = ({ isLocked, bridge, index }
 // ─── SearchStatusPanel (main export) ─────────────────────────────────────────
 
 export const SearchStatusPanel: React.FC = () => {
-  const runId = 'turing-active-run';
+  const params = useParams();
+  const rawId = params?.runId;
+  const runId = Array.isArray(rawId) ? rawId[0] : rawId || '';
   const { state, error } = useSearchStream(runId);
 
   const isLocked = state?.isLocked || false;

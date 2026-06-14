@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import { useParams } from 'next/navigation';
 import { useReportStream } from '@/hooks/useReportStream';
 import { MechanismSection } from './MechanismSection';
 import { BridgesSection } from './BridgesSection';
@@ -8,7 +9,9 @@ import { ExperimentSection } from './ExperimentSection';
 import { WarningsSection } from './WarningsSection';
 
 export const StreamingReport: React.FC = () => {
-  const runId = 'turing-active-run';
+  const params = useParams();
+  const rawId = params?.runId;
+  const runId = Array.isArray(rawId) ? rawId[0] : rawId || '';
   const { report, isLoading } = useReportStream(runId);
 
   // If report is null, we are totally waiting for the stream to begin

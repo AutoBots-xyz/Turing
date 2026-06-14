@@ -24,7 +24,7 @@ export const ConfidencePanel: React.FC<ConfidencePanelProps> = ({ graph }) => {
     : 0;
   
   if (!graph.overall_graph_confidence && edgeCount > 0) {
-    const avgWeight = graph.edges.reduce((sum, edge) => sum + Math.abs(edge.weight), 0) / edgeCount;
+    const avgWeight = graph.edges.reduce((sum, edge) => sum + Math.abs(edge.weight || 0), 0) / edgeCount;
     overallConfidence = Math.round(avgWeight * 100);
   }
 
@@ -37,7 +37,7 @@ export const ConfidencePanel: React.FC<ConfidencePanelProps> = ({ graph }) => {
       {/* Scrollable container for dynamic edge iteration */}
       <div className="flex-1 flex flex-col gap-4 overflow-y-auto pr-2 custom-scrollbar">
         {graph.edges.map((edge, idx) => {
-          const conf = Math.round(Math.abs(edge.weight) * 100);
+          const conf = Math.round(Math.abs(edge.weight || 0) * 100);
           
           let variant: 'success' | 'warning' | 'destructive' = 'success';
           let icon = '✅';

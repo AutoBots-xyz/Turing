@@ -1,10 +1,14 @@
 "use client";
 
 import React from 'react';
+import { useParams } from 'next/navigation';
 import { useRunState } from '@/hooks/useRunState';
 
 export const LayerProgress: React.FC = () => {
-  const { runState } = useRunState('turing-active-run');
+  const params = useParams();
+  const rawId = params?.runId;
+  const runId = Array.isArray(rawId) ? rawId[0] : rawId || '';
+  const { runState } = useRunState(runId);
   // Default to 1 if no state is present
   const currentLayer = runState?.currentLayer || 1;
 

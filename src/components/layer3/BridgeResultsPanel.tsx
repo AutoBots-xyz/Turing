@@ -3,6 +3,7 @@
 "use client";
 
 import React from 'react';
+import { useParams } from 'next/navigation';
 import { useGraphAnimation } from '@/hooks/useGraphAnimation';
 import { CausalNode, CausalEdge } from '@/types/graph';
 
@@ -26,7 +27,7 @@ const SourceDomainColumn: React.FC<{ nodes: CausalNode[] }> = ({ nodes }) => {
                 <div className={`text-xl font-bold font-sans animate-glitch ${node.type === 'bottleneck' ? 'text-red-600' : (node.type === 'outcome' ? 'text-orange-600' : 'text-black')}`}>
                   {node.label}
                 </div>
-                <div className="text-xs mt-2 text-gray-600 font-sans font-mono">Value: {node.value.toFixed(2)}</div>
+                <div className="text-xs mt-2 text-gray-600 font-sans font-mono">Value: {(node.value || 0).toFixed(2)}</div>
               </div>
               {i < Math.min(nodes.length, 5) - 1 && (
                 <div className="w-[2px] h-[40px] bg-black" />
@@ -78,7 +79,7 @@ const SemanticStrippingColumn: React.FC<{ nodes: CausalNode[] }> = ({ nodes }) =
                 <span className="text-orange-500 font-bold tracking-wider">➔ VAR_{node.id}</span>
               </div>
               <div className="text-sm text-gray-500 font-mono mt-1 border-l border-gray-700 pl-3 ml-2 uppercase">
-                Properties: continuous, β={node.beta.toFixed(3)}
+                Properties: continuous, β={(node.beta || 0).toFixed(3)}
               </div>
             </div>
           ))}
@@ -119,8 +120,8 @@ const StructuralFingerprintColumn: React.FC<{ nodes: CausalNode[], edges: Causal
                     <div className="py-2 bg-black text-white truncate px-1">VAR_{rowNode.id}</div>
                     {topNodes.map(colNode => {
                       const edge = edges.find(e => e.source === rowNode.id && e.target === colNode.id);
-                      const weight = edge ? Math.abs(edge.weight).toFixed(2) : '0.00';
-                      const isStrong = edge && Math.abs(edge.weight) > 0.5;
+                      const weight = edge ? Math.abs(edge.weight || 0).toFixed(2) : '0.00';
+                      const isStrong = edge && Math.abs(edge.weight || 0) > 0.5;
                       return (
                         <div key={`cell-${rowNode.id}-${colNode.id}`} className={`py-2 border border-black ${rowNode.id === colNode.id ? 'bg-gray-50' : 'bg-white'} ${isStrong ? 'text-orange-500' : ''}`}>
                           {weight}
@@ -151,7 +152,10 @@ const StructuralFingerprintColumn: React.FC<{ nodes: CausalNode[], edges: Causal
 
 // ─── BridgeResultsPanel ────────────────────────────────────────────────────────
 export const BridgeResultsPanel: React.FC = () => {
-  const { graph } = useGraphAnimation('turing-active-run');
+  const params = useParams();
+  const rawId = params?.runId;
+  const runId = Array.isArray(rawId) ? rawId[0] : rawId || '';
+  const { graph } = useGraphAnimation(runId);
   const nodes = graph?.nodes || [];
   const edges = graph?.edges || [];
 
