@@ -10,5 +10,6 @@ export interface RunState {
   layer2Status: LayerStatus;
   layer3Status: LayerStatus;
   layer4Status: LayerStatus;
+  layer1Progress?: number;
   progressPercentage: number;
 }
