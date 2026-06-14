@@ -14,6 +14,7 @@ class Edge(BaseModel):
     target: str
     relation: str
     confidence: float = Field(..., ge=0.0, le=100.0, description="Confidence percentage from 0 to 100")
+    weight: float = Field(default=1.0, description="Edge weight (e.g., correlation coefficient)")
 
 class CausalGraph(BaseModel):
     nodes: List[Node]
