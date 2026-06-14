@@ -264,6 +264,17 @@ class UniversalExtractor:
                 "Please upload a CSV where at least some columns contain numbers."
             )
 
+        # 4.1 Drop zero-variance (constant) columns
+        variances = numeric_df.var()
+        constant_cols = variances[variances == 0].index
+        if len(constant_cols) > 0:
+            numeric_df = numeric_df.drop(columns=constant_cols)
+            warnings.append(f"Dropped {len(constant_cols)} constant columns.")
+
+        # 4.2 Add tiny jitter to prevent singular matrix errors in causal discovery
+        import numpy as np
+        numeric_df = numeric_df + np.random.normal(0, 1e-6, numeric_df.shape)
+
         # 5. Check for low data warning
         min_rows = int(os.getenv("MIN_DATA_ROWS", "30"))
         final_len = len(numeric_df)

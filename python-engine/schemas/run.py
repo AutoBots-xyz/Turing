@@ -14,8 +14,9 @@ class RunStatus(str, Enum):
 
 
 class RunCreate(BaseModel):
-    input_file: str = Field(..., description="Filename of the uploaded CSV or PDF")
-    input_type: str = Field(..., description="'csv' for Data Path, 'text' for Text Path")
+    input_file: Optional[str] = Field(default="unknown.csv", description="Filename of the uploaded CSV or PDF")
+    input_type: Optional[str] = Field(default="DATA_PATH", description="'csv' for Data Path, 'text' for Text Path")
+    domain: Optional[str] = Field(default="Biology")
 
 
 class Run(BaseModel):

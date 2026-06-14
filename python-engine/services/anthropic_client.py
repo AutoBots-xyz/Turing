@@ -10,12 +10,33 @@ from schemas.graph import CausalGraph, Node, Edge
 def _get_llm_client():
     """
     Returns the configured LLM client via LiteLLM.
-    Falls back to a safe default if the API key is not configured.
+    Supports Anthropic, OpenAI, NVIDIA NIM, and Groq.
+    Falls back to None if no API key is configured.
     """
     try:
         import litellm
-        if not any(os.getenv(k) for k in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY"]):
-            raise EnvironmentError("No LLM API KEY set")
+        supported_keys = [
+            "ANTHROPIC_API_KEY",
+            "OPENAI_API_KEY",
+            "NVIDIA_API_KEY",
+            "NVIDIA_NIM_API_KEY",
+            "GROQ_API_KEY",
+        ]
+        found = {k: os.getenv(k) for k in supported_keys if os.getenv(k)}
+        if not found:
+            raise EnvironmentError("No supported LLM API KEY found in environment")
+        
+        # Inject keys into litellm explicitly so it routes to the right provider
+        for key_name, key_val in found.items():
+            if key_name == "GROQ_API_KEY":
+                litellm.groq_key = key_val
+            elif key_name == "ANTHROPIC_API_KEY":
+                litellm.anthropic_key = key_val
+            elif key_name == "OPENAI_API_KEY":
+                litellm.openai_key = key_val
+            elif key_name in ("NVIDIA_API_KEY", "NVIDIA_NIM_API_KEY"):
+                litellm.api_key = key_val
+        
         return litellm
     except (ImportError, EnvironmentError):
         return None  # Signals safe fallback
@@ -53,7 +74,6 @@ def generate_domain_blind_query(node: Node, graph: CausalGraph) -> str:
         model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
         messages=[{"role": "user", "content": prompt}],
         max_tokens=100,
-        api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY")
     )
     return response.choices[0].message.content.strip()
 
@@ -94,7 +114,6 @@ async def extract_causal_graph_from_text(text: str) -> CausalGraph:
         model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
         messages=[{"role": "user", "content": prompt}],
         max_tokens=800,
-        api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY")
     )
     raw = response.choices[0].message.content.strip()
     # Strip markdown fences if present
@@ -139,7 +158,6 @@ async def evaluate_compatibility_and_transferability(
         model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
         messages=[{"role": "user", "content": prompt}],
         max_tokens=60,
-        api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY")
     )
     raw = response.choices[0].message.content.strip()
     if raw.startswith("```"):

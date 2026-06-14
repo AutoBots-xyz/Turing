@@ -67,7 +67,6 @@ class AgentFactory:
             model=os.getenv("DEFAULT_LLM_MODEL", "gpt-4o"),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=150,
-            api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or None
         )
         return response.choices[0].message.content.strip()
 
@@ -105,7 +104,6 @@ class AgentFactory:
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=200,
                 response_format={"type": "json_object"} if "gpt" in os.getenv("DEFAULT_LLM_MODEL", "gpt-4o") or "claude" in os.getenv("DEFAULT_LLM_MODEL", "gpt-4o") else None,
-                api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or None
             )
             raw = response.choices[0].message.content.strip()
             if raw.startswith("```"):

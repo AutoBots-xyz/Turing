@@ -96,7 +96,7 @@ class PCGraphBuilder:
         if 'pc' not in globals():
             raise ImportError("causal-learn is not installed.")
 
-        cg = pc(data_matrix, alpha, indep_test='fisherz', show_progress=False)
+        cg = pc(data_matrix, alpha, indep_test='fisherz', show_progress=False, depth=1)
 
         # Convert causal-learn graph to NetworkX
         nx_graph = nx.DiGraph()

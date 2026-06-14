@@ -147,8 +147,10 @@ async def process_full_pipeline(run_id: str, file_bytes: bytes, filename: str):
             df, _ = UniversalExtractor.extract_data(file_bytes, filename)
             RUNS_STORE[run_id]["layer1Progress"] = 20
             await asyncio.sleep(1.5)
-            from services.layer1.pc_algorithm import PCGraphBuilder
-            graph = PCGraphBuilder.build_graph(df)
+            # Use Continuous Optimization (NOTEARS) to bypass combinatorial explosion
+            from services.layer1.notears import NotearsGraphBuilder
+            if path_type == "DATA":
+                graph = await asyncio.to_thread(NotearsGraphBuilder.build_graph, df, 0.05)
             RUNS_STORE[run_id]["layer1Progress"] = 40
             await asyncio.sleep(1.5)
         else:
@@ -157,7 +159,7 @@ async def process_full_pipeline(run_id: str, file_bytes: bytes, filename: str):
             await asyncio.sleep(1.5)
             from services.layer1.ontology_builder import LLMGraphBuilder
             _model = os.getenv("DEFAULT_LLM_MODEL", "gpt-4o")
-            graph = LLMGraphBuilder.build_graph(text, _model)
+            graph = await asyncio.to_thread(LLMGraphBuilder.build_graph, text, _model)
             RUNS_STORE[run_id]["layer1Progress"] = 40
             await asyncio.sleep(1.5)
 
@@ -167,7 +169,7 @@ async def process_full_pipeline(run_id: str, file_bytes: bytes, filename: str):
         try:
             from services.layer1.validator import GraphValidator
             _model = os.getenv("DEFAULT_LLM_MODEL", "gpt-4o")
-            result = GraphValidator.validate(graph, _model)
+            result = await asyncio.to_thread(GraphValidator.validate, graph, _model)
             graph = result.get("graph", graph) if isinstance(result, dict) and "graph" in result else result
             RUNS_STORE[run_id]["graph"] = graph
             RUNS_STORE[run_id]["layer1Progress"] = 60
@@ -175,7 +177,7 @@ async def process_full_pipeline(run_id: str, file_bytes: bytes, filename: str):
 
             from services.layer1.gaussian_process import StructuralFitter
             if path_type == "DATA":
-                StructuralFitter.fit_graph(df, graph, path_type)
+                await asyncio.to_thread(StructuralFitter.fit_graph, df, graph, path_type)
             RUNS_STORE[run_id]["layer1Progress"] = 75
             await asyncio.sleep(1.5)
 
@@ -241,23 +243,144 @@ async def process_full_pipeline(run_id: str, file_bytes: bytes, filename: str):
             layer2_res = await run_bayesian_optimization(layer2_req)
             
             agents = []
+            heatmap_nodes = []
+            heatmap_lines = []
+            
             agent_index = 0
+            
             for i, res in enumerate(layer2_res.simulation_results):
                 for action in res.agent_actions:
+                    role = action.agent_role.lower()
+                    
+                    # Exact mockup spacing: 200px increments
+                    base_y = 150 + (agent_index * 200)
+                    
+                    agent_y = base_y
+                    # Stagger nodes up by 50px so the agent text aligns with the middle/bottom of the node
+                    node_y = base_y - 50 
+                    
+                    # Determine node styling and x-offset matching mockup
+                    if role == 'contrarian' or role == 'skeptic':
+                        variant = 'falsified'
+                        x_offset = 500
+                    elif role == 'exploiter':
+                        variant = 'exploiter' # Use standard height exploiter to prevent overlap
+                        x_offset = 450
+                    else: # explorer
+                        variant = 'normal'
+                        x_offset = 400
+                        
+                    # 1. Left sidebar Agent Entry
                     agents.append({
                         "id": f"action-{i}-{action.agent_id}",
                         "type": action.agent_role,
                         "agentId": action.agent_id,
-                        "y": 50 + (agent_index * 90),
+                        "y": agent_y,
                         "content": action.act,
-                        "delayMs": agent_index * 150
+                        "delayMs": agent_index * 1500 # 1.5s delay increments like mockup
                     })
+                    
+                    # 2. Center Canvas Hypothesis Node
+                    heatmap_nodes.append({
+                        "id": f"node-{i}-{action.agent_id}",
+                        "variant": variant,
+                        "label": f"ITERATION {i+1} | {action.agent_role.upper()}",
+                        "title": f"Test: {action.decide}",
+                        "description": action.act,
+                        "mechanism": action.think,
+                        "x": x_offset,
+                        "y": node_y,
+                        "delayMs": agent_index * 1500
+                    })
+                    
+                    # 3. Connecting Line (Agent to Node)
+                    # Starts from the agent text (y + 50) and steps UP to the node edge (y)
+                    heatmap_lines.append({
+                        "id": f"line-{i}-{action.agent_id}",
+                        "variant": action.agent_role,
+                        "x1": 280, # Left sidebar exact edge (mockup uses 280)
+                        "y1": agent_y + 50, # Agent anchor (lower)
+                        "x2": x_offset, # Node X edge
+                        "y2": base_y, # Node anchor (higher, steps UP)
+                        "delayMs": agent_index * 1500
+                    })
+                    
+                    # 4. Vertical Tree Connectors (from previous node)
+                    # Removed as per user request to drop the dashed vertical spine.
+                        
                     agent_index += 1
                     
+            # --- FINAL CONSENSUS NODES ---
+            # Append the Confirmed Root Cause and Synthesized Abstraction
+            base_y = 150 + (agent_index * 200)
+            agent_y = base_y
+            node_y = base_y - 50
+            
+            # Agent: ORACLE_EVAL
+            agents.append({
+                "id": f"action-oracle-eval",
+                "type": "explorer", # Green text
+                "agentId": "ORACLE_EVAL",
+                "y": agent_y,
+                "content": f"Consensus reached. Optimal intervention identified with {layer2_res.confidence}% confidence.",
+                "delayMs": agent_index * 1500
+            })
+            
+            # Green Node
+            heatmap_nodes.append({
+                "id": "node-confirmed-root",
+                "variant": "confirmed",
+                "label": "CONFIRMED ROOT CAUSE",
+                "title": f"Optimal Intervention: {layer2_res.best_intervention}",
+                "description": f"Predicted Value: {layer2_res.simulation_results[-1].predicted_outcome:.4f}",
+                "x": 400,
+                "y": node_y,
+                "delayMs": agent_index * 1500
+            })
+            
+            # Horizontal Line to Green Node
+            heatmap_lines.append({
+                "id": f"line-oracle",
+                "variant": "explorer",
+                "x1": 280, 
+                "y1": agent_y + 50, 
+                "x2": 400, 
+                "y2": base_y, 
+                "delayMs": agent_index * 1500
+            })
+            
+            agent_index += 1
+            base_y = 150 + (agent_index * 200)
+            
+            # Orange Node (SYNTHESIZED_ABSTRACTION)
+            heatmap_nodes.append({
+                "id": "node-synthesized-abstraction",
+                "variant": "synthesized",
+                "label": "SYNTHESIZED_ABSTRACTION",
+                "title": f"Causal Optimization Strategy",
+                "mechanism": f"The Bayesian Optimizer converged on {layer2_res.best_intervention} to maximize the target variable '{target_node}'.",
+                "x": 350,
+                "y": base_y - 50,
+                "delayMs": agent_index * 1500
+            })
+            
+            # Solid vertical line dropping from green node (x=650 is middle of x=400 + 500w)
+            heatmap_lines.append({
+                "id": f"line-synthesis-drop",
+                "variant": "explorer", # Solid black/green line
+                "x1": 650, 
+                "y1": node_y + 150, # Approximate bottom of the green node
+                "x2": 650, 
+                "y2": base_y - 50,  # Top of the orange node
+                "delayMs": agent_index * 1500
+            })
+            
             RUNS_STORE[run_id]["layer2Data"].update({
                 "status": "Completed Bayesian Optimization",
                 "nodesComputed": len(agents),
                 "agents": agents,
+                "heatmapNodes": heatmap_nodes,
+                "heatmapLines": heatmap_lines
             })
         except Exception as e:
             logger.error(f"Layer 2 failed for run {run_id}: {e}", exc_info=True)
@@ -338,10 +461,12 @@ async def process_full_pipeline(run_id: str, file_bytes: bytes, filename: str):
         
         RUNS_STORE[run_id]["layer4Data"] = {
             "isComplete": False,
-            "mechanismExplanation": "Generating report...",
-            "bridgeSummary": "",
-            "experimentResults": "",
-            "warnings": []
+            "theMechanism": "Generating mechanism analysis...",
+            "theExperiment": "",
+            "whoSolvedThis": "",
+            "warningsAndConflicts": [],
+            "next3Actions": [],
+            "confidenceDisclaimer": ""
         }
         
         try:
@@ -355,14 +480,28 @@ async def process_full_pipeline(run_id: str, file_bytes: bytes, filename: str):
             
             RUNS_STORE[run_id]["layer4Data"] = {
                 "isComplete": True,
-                "mechanismExplanation": final_report.problem_statement + "\n\n" + final_report.executive_summary,
-                "bridgeSummary": "\n".join([b.match.mechanism.source_result.title for b in final_report.top_bridges]) if final_report.top_bridges else "No bridges found.",
-                "experimentResults": final_report.recommended_experiment,
-                "warnings": final_report.contradiction_warnings
+                # Section 1 — The Mechanism
+                "theMechanism": final_report.the_mechanism,
+                # Section 2 — The Experiment
+                "theExperiment": final_report.the_experiment,
+                # Section 3 — Who Already Solved This
+                "whoSolvedThis": final_report.who_solved_this,
+                # Section 4 — Warnings & Conflicts
+                "warningsAndConflicts": final_report.warnings_and_conflicts,
+                # Section 5 — Next 3 Actions
+                "next3Actions": final_report.next_3_actions,
+                # Metadata
+                "confidenceDisclaimer": final_report.confidence_disclaimer,
+                # Legacy fields kept for compatibility — will be removed after frontend update
+                "mechanismExplanation": final_report.the_mechanism,
+                "bridgeSummary": final_report.who_solved_this,
+                "experimentResults": final_report.the_experiment,
+                "warnings": final_report.warnings_and_conflicts
             }
         except Exception as e:
             logger.error(f"Layer 4 failed for run {run_id}: {e}", exc_info=True)
             RUNS_STORE[run_id]["layer4Data"]["isComplete"] = True
+            RUNS_STORE[run_id]["layer4Data"]["theMechanism"] = f"Failed to generate report: {e}"
             RUNS_STORE[run_id]["layer4Data"]["mechanismExplanation"] = f"Failed to generate report: {e}"
             
         RUNS_STORE[run_id]["layer4Status"] = "completed"
@@ -499,4 +638,4 @@ async def get_layer4_stream(run_id: str):
                 yield f"data: {json.dumps({'isComplete': False, 'mechanismExplanation': 'Waiting for prior layers...', 'bridgeSummary': '', 'experimentResults': '', 'warnings': []})}\n\n"
             await asyncio.sleep(1.0)
             
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

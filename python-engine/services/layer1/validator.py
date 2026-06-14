@@ -230,7 +230,6 @@ class GraphValidator:
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
                     response_format={"type": "json_object"} if "gpt" in model_name or "claude" in model_name else None,
-                    api_key=os.getenv("NVIDIA_NIM_API_KEY") or os.getenv("NVIDIA_API_KEY") or None
                 )
                 content = response.choices[0].message.content.strip()
                 
