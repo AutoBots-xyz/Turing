@@ -12,15 +12,8 @@ from schemas.layer2 import SearchSpace
 
 class BayesianOptimizer:
     """
-    Mock Bayesian Optimizer.
-    Selects the next point to simulate based on historical performance.
-
-    In production, this uses Expected Improvement (EI):
-        EI = (predicted_mean - best_known) * Phi(Z) + predicted_std * phi(Z)
-    where Phi and phi are the standard normal CDF and PDF.
-
-    For the MVP mock, it biases towards the historically best values,
-    starting from the center of the domain when no history is available.
+    Bayesian Optimizer.
+    Selects the next point to simulate based on historical performance using Expected Improvement (EI).
     """
 
     def get_base_point(

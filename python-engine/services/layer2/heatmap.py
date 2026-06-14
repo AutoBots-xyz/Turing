@@ -137,7 +137,7 @@ class HeatmapGenerator:
                 sim_res = self.simulator.simulate(payload.nodes, payload.edges, interventions)
                 pred = sim_res.predictions.get(sink_node_name)
                 
-                # ERR-B40 fix: Do not inject fake Gaussian Predictions if the simulation fails
+                # ERR-B40 fix: Do not inject synthetic Gaussian Predictions if the simulation fails
                 if not pred:
                     continue
 
