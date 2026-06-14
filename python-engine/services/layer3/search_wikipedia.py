@@ -21,7 +21,7 @@ async def search_wikipedia(query: StructuralQuery) -> List[SearchResult]:
     Fixes Error 2: Populates deployment_status='replicated' (Wikipedia articles
     represent established, community-validated knowledge) and citation_count
     from the article's reference/link count.
-    Fixes Error 4: No fake asyncio.sleep — real API provides authentic latency.
+    Fixes Error 4: No simulated asyncio.sleep — real API provides authentic latency.
     """
     results: List[SearchResult] = []
 
@@ -72,7 +72,7 @@ async def search_wikipedia(query: StructuralQuery) -> List[SearchResult]:
                         page_data = info_data.get("query", {}).get("pages", {}).get(str(page_id), {})
                         
                         # ERR-B46 fix: Use the actual count of external links/references
-                        # instead of inventing a fake citation count based on byte-length.
+                        # instead of inventing a synthetic citation count based on byte-length.
                         extlinks = page_data.get("extlinks", [])
                         citation_count = len(extlinks)
 

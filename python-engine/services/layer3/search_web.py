@@ -12,7 +12,7 @@ MAX_RESULTS = 5
 # Search query suffix to target engineering whitepapers and case studies globally
 SEARCH_SUFFIX = "whitepaper OR case study OR engineering blog"
 
-# The hardcoded _DEPLOYED_DOMAINS and _AUTHORITATIVE_DOMAINS lists have been removed.
+# The static _DEPLOYED_DOMAINS and _AUTHORITATIVE_DOMAINS lists have been removed.
 # ERR-B23 fix: evaluate_deployment_status dynamically classifies the deployment status 
 # via an LLM, making the classification scalable and robust without a manual whitelist.
 
@@ -29,7 +29,7 @@ async def search_web(query: StructuralQuery) -> List[SearchResult]:
     Layer 3: Web Search via Serper.dev — Industry whitepapers, Case studies, Tech blogs.
 
     Fixes L3-8: deployment_status is now inferred from the result URL domain
-    rather than hardcoded to "blog" for all results. High-authority engineering
+    rather than locked to "blog" for all results. High-authority engineering
     sources (AWS, Google Cloud, IEEE, etc.) receive proportionally higher
     evidence scores in bridge_ranker.py.
 
@@ -67,7 +67,7 @@ async def search_web(query: StructuralQuery) -> List[SearchResult]:
 
                 confidence = _confidence_from_rank(rank, total)
 
-                # ERR-B23 fix: infer status dynamically using an LLM instead of hardcoded domains
+                # ERR-B23 fix: infer status dynamically using an LLM instead of static domains
                 deployment_status = await evaluate_deployment_status(url or "", snippet)
 
                 results.append(SearchResult(

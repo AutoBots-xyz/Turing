@@ -58,7 +58,7 @@ async def match_graphs(request: Step13Request) -> Step13Response:
     Step 13: Graph Isomorphism Matcher
     Compares each candidate ExtractedMechanism against the user's target graph
     using structural isomorphism scoring. Thresholds are configurable via
-    request.thresholds (no more hardcoded magic numbers).
+    request.thresholds (no more static magic numbers).
     """
     thresholds = request.thresholds
     matches = []

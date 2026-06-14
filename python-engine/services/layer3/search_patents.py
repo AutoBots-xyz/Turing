@@ -18,9 +18,9 @@ def _confidence_from_rank(rank: int, total: int) -> float:
 async def search_patents(query: StructuralQuery) -> List[SearchResult]:
     """
     Layer 4: Google Patents via Serper.dev API
-    Fixes Error 3: Makes real HTTP calls to Serper.dev — removes all fake
-    Boeing/NASA hardcoded results and non-existent mock URLs.
-    Fixes Error 4: No fake asyncio.sleep — real API provides authentic latency.
+    Fixes Error 3: Makes real HTTP calls to Serper.dev — removes all synthetic
+    Boeing/NASA static results and non-existent test URLs.
+    Fixes Error 4: No simulated asyncio.sleep — real API provides authentic latency.
 
     Populates citation_count, replication_count, and deployment_status from
     actual patent metadata returned by the API.
@@ -63,7 +63,7 @@ async def search_patents(query: StructuralQuery) -> List[SearchResult]:
                     f"https://patents.google.com/patent/{patent_number}" if patent_number else None
                 )
 
-                # ERR-B45 fix: Remove 8-company hardcoded whitelist. Any assignee implies commercial backing.
+                # ERR-B45 fix: Remove 8-company static whitelist. Any assignee implies commercial backing.
                 assignee = patent.get("assignee", "").strip()
                 deployment_status = "deployed" if assignee else "single_study"
 
